@@ -1,0 +1,51 @@
+tools:
+  - name: dodo_inventory_stocks
+    description: Read Dodo IS inventory stock balances.
+    connector: dodo
+    method: GET
+    path: /dodopizza/{country}/accounting/inventory-stocks
+    risk_level: read
+    enabled: true
+    allowed_query_params:
+      - units
+      - from
+      - to
+      - skip
+      - take
+    max_response_chars: 30000
+
+  - name: dodo_sales
+    description: Read Dodo IS accounting sales.
+    connector: dodo
+    method: GET
+    path: /dodopizza/{country}/accounting/sales
+    risk_level: read
+    enabled: false
+    allowed_query_params:
+      - units
+      - from
+      - to
+      - skip
+      - take
+    max_response_chars: 30000
+
+  - name: dodo_create_write_off
+    description: Create a Dodo IS accounting write-off. Disabled until write policy is designed.
+    connector: dodo
+    method: POST
+    path: /dodopizza/{country}/accounting/write-offs
+    risk_level: write
+    enabled: false
+    requires_approval: true
+    max_response_chars: 20000
+
+  - name: superset_chart_data
+    description: Read data for an approved Superset chart.
+    connector: superset
+    method: POST
+    path: /api/v1/chart/data
+    risk_level: read
+    enabled: false
+    requires_approval: false
+    max_response_chars: 30000
+

@@ -1,0 +1,15 @@
+mode: enforce
+default_decision: deny
+allowed_tools:
+  - dodo_inventory_stocks
+blocked_tools: []
+require_approval_for_risk:
+  - write
+  - admin
+max_request_params_chars: 12000
+max_response_chars: 30000
+recommendation_thresholds:
+  denied_tool_count: 3
+  negative_feedback_count: 2
+  large_response_chars: 25000
+
