@@ -48,9 +48,19 @@ OpenAPI is exposed at `http://127.0.0.1:8000/docs`.
 - `POST /feedback` - attach human feedback to an audit event.
 - `GET /learning/recommendations` - policy/tooling recommendations from audit data.
 
+## First Tool Set
+
+The initial allowlist is derived from real OpenClaw tasks rather than guesses.
+See `docs/OPENCLAW_TASKS.md`.
+
+Active tools:
+
+- Dodo courier orders, staff shifts, and delivery statistics;
+- Dodo accounting sales and product write-offs;
+- constrained Superset employee-discount chart data.
+
 ## Implementation Principle
 
 The bridge learns from usage, denials, errors, and human feedback, but it only
 creates recommendations. Enabling a new Dodo/Superset function or relaxing a
 restriction must be a deliberate code/config change committed to git.
-

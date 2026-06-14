@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -59,6 +59,10 @@ class PolicyEngine:
         if not tool.enabled:
             return PolicyDecision(outcome="deny", reason="tool_disabled")
 
+        constraint_reason = self._validate_constraints(tool, request.parameters)
+        if constraint_reason:
+            return PolicyDecision(outcome="deny", reason=constraint_reason)
+
         explicitly_allowed = "*" in self.config.allowed_tools or tool.name in self.config.allowed_tools
         if not explicitly_allowed:
             if self.config.mode == "observe" and tool.risk_level == RiskLevel.READ:
@@ -80,3 +84,28 @@ class PolicyEngine:
 
         return PolicyDecision(outcome="allow", reason="tool_allowed")
 
+    def _validate_constraints(self, tool: ToolSpec, parameters: dict[str, Any]) -> str | None:
+        for required in tool.required_params:
+            if required not in parameters or parameters[required] in (None, ""):
+                return f"missing_required_param:{required}"
+
+        if tool.allowed_dashboard_ids:
+            dashboard_id = parameters.get("dashboard_id")
+            if dashboard_id not in tool.allowed_dashboard_ids and str(dashboard_id) not in {
+                str(item) for item in tool.allowed_dashboard_ids
+            }:
+                return "dashboard_not_allowed"
+
+        if tool.allowed_chart_ids:
+            chart_id = parameters.get("chart_id", parameters.get("slice_id"))
+            if chart_id not in tool.allowed_chart_ids and str(chart_id) not in {
+                str(item) for item in tool.allowed_chart_ids
+            }:
+                return "chart_not_allowed"
+
+        if tool.allowed_metrics:
+            metric = parameters.get("metric")
+            if metric not in tool.allowed_metrics:
+                return "metric_not_allowed"
+
+        return None

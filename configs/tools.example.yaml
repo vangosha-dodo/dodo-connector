@@ -1,11 +1,16 @@
 tools:
-  - name: dodo_inventory_stocks
-    description: Read Dodo IS inventory stock balances.
+  - name: dodo_delivery_courier_orders
+    description: Read Dodo IS courier order rows for delivery analytics and courier reports.
     connector: dodo
     method: GET
-    path: /dodopizza/{country}/accounting/inventory-stocks
+    path: /dodopizza/{country}/delivery/couriers-orders
     risk_level: read
     enabled: true
+    status: active
+    required_params:
+      - units
+      - from
+      - to
     allowed_query_params:
       - units
       - from
@@ -13,14 +18,77 @@ tools:
       - skip
       - take
     max_response_chars: 30000
+    tags:
+      - openclaw-derived
+      - courier-report
+      - delivery
+    source_evidence:
+      - OpenClaw skill dodo-courier-report pulls delivery/couriers-orders.
+      - Temporary checks compared Tambov-3 courier UI with Dodo API delivery/couriers-orders.
 
-  - name: dodo_sales
-    description: Read Dodo IS accounting sales.
+  - name: dodo_staff_shifts
+    description: Read Dodo IS staff shifts, primarily courier shifts for productivity calculations.
+    connector: dodo
+    method: GET
+    path: /dodopizza/{country}/staff/shifts
+    risk_level: read
+    enabled: true
+    status: active
+    required_params:
+      - units
+      - clockInFrom
+      - clockInTo
+    allowed_query_params:
+      - units
+      - clockInFrom
+      - clockInTo
+      - staffTypeName
+      - skip
+      - take
+    max_response_chars: 30000
+    tags:
+      - openclaw-derived
+      - courier-report
+      - staff
+    source_evidence:
+      - OpenClaw skill dodo-courier-report combines staff/shifts with courier orders.
+
+  - name: dodo_delivery_statistics
+    description: Read Dodo IS delivery statistics by period and units.
+    connector: dodo
+    method: GET
+    path: /dodopizza/{country}/delivery/statistics
+    risk_level: read
+    enabled: true
+    status: active
+    required_params:
+      - units
+      - from
+      - to
+    allowed_query_params:
+      - units
+      - from
+      - to
+    max_response_chars: 30000
+    tags:
+      - openclaw-derived
+      - delivery
+      - analytics
+    source_evidence:
+      - OpenClaw April delivery scripts used delivery/statistics for unit delivery reporting.
+
+  - name: dodo_accounting_sales
+    description: Read Dodo IS accounting sales for product/hour/unit summaries.
     connector: dodo
     method: GET
     path: /dodopizza/{country}/accounting/sales
     risk_level: read
-    enabled: false
+    enabled: true
+    status: active
+    required_params:
+      - units
+      - from
+      - to
     allowed_query_params:
       - units
       - from
@@ -28,6 +96,137 @@ tools:
       - skip
       - take
     max_response_chars: 30000
+    tags:
+      - openclaw-derived
+      - sales
+      - slices
+    source_evidence:
+      - OpenClaw export tambov1_slices_sales_writeoffs_2026-06-10_raw.json cites accounting/sales.
+
+  - name: dodo_accounting_writeoffs_products
+    description: Read Dodo IS product write-offs for sales/write-off slice analysis.
+    connector: dodo
+    method: GET
+    path: /dodopizza/{country}/accounting/write-offs/products
+    risk_level: read
+    enabled: true
+    status: active
+    required_params:
+      - units
+      - from
+      - to
+    allowed_query_params:
+      - units
+      - from
+      - to
+      - skip
+      - take
+    max_response_chars: 30000
+    tags:
+      - openclaw-derived
+      - writeoffs
+      - slices
+    source_evidence:
+      - OpenClaw export tambov1_slices_sales_writeoffs_2026-06-10_raw.json cites accounting/write-offs/products.
+
+  - name: superset_employee_discount_chart
+    description: Read the approved Superset employee discount chart data for discount reconciliation.
+    connector: superset
+    method: POST
+    path: /api/v1/chart/data
+    risk_level: read
+    enabled: true
+    status: active
+    required_params:
+      - dashboard_id
+      - chart_id
+      - metric
+    allowed_query_params:
+      - dashboard_id
+    allowed_dashboard_ids:
+      - 1410
+    allowed_chart_ids:
+      - 26708
+    allowed_metrics:
+      - employee_segment_discount
+    max_response_chars: 30000
+    tags:
+      - openclaw-derived
+      - superset
+      - employee-discount
+    source_evidence:
+      - OpenClaw Superset evidence used /api/v1/chart/data?dashboard_id=1410 and chart 26708.
+      - OpenClaw exports reconciled employee discounts for Jan-May 2026.
+
+  - name: superset_kiosk_sales_share
+    description: Read approved Superset chart data for monthly share of sales via kiosks.
+    connector: superset
+    method: POST
+    path: /api/v1/chart/data
+    risk_level: read
+    enabled: false
+    status: candidate
+    required_params:
+      - dashboard_id
+      - chart_id
+      - metric
+    allowed_query_params:
+      - dashboard_id
+    allowed_metrics:
+      - Share sales via Kiosk
+    max_response_chars: 30000
+    tags:
+      - openclaw-derived
+      - superset
+      - marketing
+      - kiosk
+    source_evidence:
+      - OpenClaw cron job "Доля продаж через киоски" uses Superset ordres_types_analytics.
+      - "Source metric from cron payload: Share sales via Kiosk."
+
+  - name: superset_clients_phone_share
+    description: Read approved Superset chart data for dine-in identified orders via cashier.
+    connector: superset
+    method: POST
+    path: /api/v1/chart/data
+    risk_level: read
+    enabled: false
+    status: candidate
+    required_params:
+      - dashboard_id
+      - chart_id
+      - metric
+    allowed_query_params:
+      - dashboard_id
+    allowed_metrics:
+      - Share of dine in identified orders via cashier
+    max_response_chars: 30000
+    tags:
+      - openclaw-derived
+      - superset
+      - marketing
+      - clients-phone
+    source_evidence:
+      - OpenClaw cron job "Клиенты с телефоном" uses Superset Client_analytics.
+      - "Source metric from cron payload: Share of dine in identified orders via cashier."
+
+  - name: dodo_auth_session_status
+    description: Check OfficeManager/admin Dodo IS saved session health without printing secrets.
+    connector: internal
+    method: GET
+    path: ""
+    risk_level: admin
+    enabled: false
+    status: restricted
+    requires_approval: true
+    max_response_chars: 12000
+    tags:
+      - openclaw-derived
+      - auth
+      - restricted
+    source_evidence:
+      - OpenClaw cron job "Daily Dodo IS auth refresh" checked OfficeManager EmployeeList and admin Authenticate/Structure.
+    # This remains disabled because it touches saved browser sessions/cookies and MFA state.
 
   - name: dodo_create_write_off
     description: Create a Dodo IS accounting write-off. Disabled until write policy is designed.
@@ -36,16 +235,9 @@ tools:
     path: /dodopizza/{country}/accounting/write-offs
     risk_level: write
     enabled: false
+    status: restricted
     requires_approval: true
     max_response_chars: 20000
-
-  - name: superset_chart_data
-    description: Read data for an approved Superset chart.
-    connector: superset
-    method: POST
-    path: /api/v1/chart/data
-    risk_level: read
-    enabled: false
-    requires_approval: false
-    max_response_chars: 30000
-
+    tags:
+      - write
+      - restricted

@@ -29,6 +29,13 @@ class ToolSpec(BaseModel):
     requires_approval: bool = False
     allowed_query_params: list[str] = Field(default_factory=list)
     max_response_chars: int | None = None
+    required_params: list[str] = Field(default_factory=list)
+    allowed_dashboard_ids: list[str | int] = Field(default_factory=list)
+    allowed_chart_ids: list[str | int] = Field(default_factory=list)
+    allowed_metrics: list[str] = Field(default_factory=list)
+    status: str = "candidate"
+    tags: list[str] = Field(default_factory=list)
+    source_evidence: list[str] = Field(default_factory=list)
 
 
 class ToolInvocationRequest(BaseModel):
@@ -66,4 +73,3 @@ class LearningRecommendation(BaseModel):
     detail: str
     tool_name: str | None = None
     confidence: float = Field(ge=0.0, le=1.0)
-
