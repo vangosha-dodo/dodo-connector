@@ -72,7 +72,7 @@ PAGINATION_PARAMETERS: list[dict[str, Any]] = [
 def build_schema(server_url: str) -> dict[str, Any]:
     server_url = server_url.rstrip("/")
     return {
-        "openapi": "3.0.3",
+        "openapi": "3.1.0",
         "info": {
             "title": "Dodo ChatGPT Bridge Read-Only API",
             "version": "0.1.0",
@@ -90,7 +90,10 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "operationId": "listDodoReadOnlyFunctions",
                     "summary": "List available read-only Dodo IS functions",
                     "description": "Returns the read-only Dodo IS functions exposed to ChatGPT.",
-                    "responses": successful_object_response("Available functions."),
+                    "responses": successful_response(
+                        "Available functions.",
+                        "#/components/schemas/DodoFunctionsResponse",
+                    ),
                 }
             },
             "/dodo/delivery/courier-orders": {
@@ -99,7 +102,7 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "summary": "Get courier delivery orders",
                     "description": "Read Dodo IS courier delivery order rows for selected units and period.",
                     "parameters": COMMON_PERIOD_PARAMETERS + PAGINATION_PARAMETERS,
-                    "responses": successful_object_response("Courier order rows."),
+                    "responses": data_response("Courier order rows."),
                 }
             },
             "/dodo/staff/shifts": {
@@ -118,7 +121,7 @@ def build_schema(server_url: str) -> dict[str, Any]:
                         }
                     ]
                     + PAGINATION_PARAMETERS,
-                    "responses": successful_object_response("Staff shift rows."),
+                    "responses": data_response("Staff shift rows."),
                 }
             },
             "/dodo/delivery/statistics": {
@@ -127,7 +130,7 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "summary": "Get delivery statistics",
                     "description": "Read Dodo IS delivery statistics for selected units and period.",
                     "parameters": COMMON_PERIOD_PARAMETERS,
-                    "responses": successful_object_response("Delivery statistics rows."),
+                    "responses": data_response("Delivery statistics rows."),
                 }
             },
             "/dodo/accounting/sales": {
@@ -136,7 +139,7 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "summary": "Get accounting sales",
                     "description": "Read Dodo IS accounting sales rows for selected units and period.",
                     "parameters": COMMON_PERIOD_PARAMETERS + PAGINATION_PARAMETERS,
-                    "responses": successful_object_response("Accounting sales rows."),
+                    "responses": data_response("Accounting sales rows."),
                 }
             },
             "/dodo/accounting/writeoffs/products": {
@@ -145,7 +148,7 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "summary": "Get product write-offs",
                     "description": "Read Dodo IS product write-off rows for selected units and period.",
                     "parameters": COMMON_PERIOD_PARAMETERS + PAGINATION_PARAMETERS,
-                    "responses": successful_object_response("Product write-off rows."),
+                    "responses": data_response("Product write-off rows."),
                 }
             },
         },
@@ -158,29 +161,148 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 }
             },
             "schemas": {
-                "BridgeObjectResponse": {
-                    "type": "object",
-                    "additionalProperties": True,
-                    "description": "JSON object returned by the Bridge. Row fields depend on the Dodo IS endpoint.",
-                }
+                "DodoFunctionsResponse": dodo_functions_response_schema(),
+                "DodoFunction": dodo_function_schema(),
+                "DodoDataResponse": dodo_data_response_schema(),
+                "DodoRequest": dodo_request_schema(),
+                "DodoPagination": dodo_pagination_schema(),
+                "DodoRow": dodo_row_schema(),
             },
         },
     }
 
 
-def successful_object_response(description: str) -> dict[str, Any]:
+def data_response(description: str) -> dict[str, Any]:
+    return successful_response(description, "#/components/schemas/DodoDataResponse")
+
+
+def successful_response(description: str, schema_ref: str) -> dict[str, Any]:
     return {
         "200": {
             "description": description,
             "content": {
                 "application/json": {
-                    "schema": {"$ref": "#/components/schemas/BridgeObjectResponse"}
+                    "schema": {"$ref": schema_ref}
                 }
             },
         },
         "401": {"description": "Invalid or missing Bridge API key."},
         "403": {"description": "The function is blocked by Bridge policy."},
         "422": {"description": "Invalid query parameters."},
+    }
+
+
+def dodo_functions_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "List of Dodo IS read-only functions exposed by the Bridge.",
+        "properties": {
+            "functions": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoFunction"},
+            }
+        },
+        "required": ["functions"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_function_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "One read-only Dodo IS function exposed by the Bridge.",
+        "properties": {
+            "name": {"type": "string", "description": "Function name for humans and agents."},
+            "description": {"type": "string", "description": "Short function description."},
+            "tool_name": {"type": "string", "description": "Internal Bridge tool id."},
+            "enabled": {"type": "boolean", "description": "Whether the backing tool is enabled."},
+            "allowed_by_policy": {"type": "boolean", "description": "Whether Bridge policy allows this function."},
+            "paginated": {"type": "boolean", "description": "Whether pagination parameters are supported."},
+        },
+        "required": ["name", "description", "tool_name", "enabled", "allowed_by_policy", "paginated"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_data_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Read-only Dodo IS data response. Dry-run responses contain request instead of rows.",
+        "properties": {
+            "function": {"type": "string", "description": "Bridge function name."},
+            "tool_name": {"type": "string", "description": "Internal Bridge tool id."},
+            "dry_run": {"type": "boolean", "description": "True when Dodo IS was not called."},
+            "request": {"$ref": "#/components/schemas/DodoRequest"},
+            "pagination": {"$ref": "#/components/schemas/DodoPagination"},
+            "rows_key": {"type": "string", "description": "Name of the Dodo response field used as rows."},
+            "row_count": {"type": "integer", "description": "Number of returned rows."},
+            "pages_fetched": {"type": "integer", "description": "Number of fetched pages."},
+            "truncated": {"type": "boolean", "description": "True when result was capped by Bridge limits."},
+            "next_skip": {"type": "integer", "description": "Skip value for the next page when truncated."},
+            "rows": {
+                "type": "array",
+                "description": "Projected Dodo IS rows. Row fields depend on endpoint and selected fields.",
+                "items": {"$ref": "#/components/schemas/DodoRow"},
+            },
+            "response": {
+                "type": "object",
+                "description": "Original Dodo IS response payload when Bridge cannot extract rows.",
+                "properties": {
+                    "payload": {
+                        "type": "string",
+                        "description": "Optional textual payload summary.",
+                    }
+                },
+                "additionalProperties": True,
+            },
+            "external_not_configured": {
+                "type": "boolean",
+                "description": "True when the Dodo connector lacks an access token and returned a dry run.",
+            },
+        },
+        "required": ["function", "tool_name"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_request_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Planned outbound Dodo IS request. Present for dry_run responses.",
+        "properties": {
+            "method": {"type": "string", "description": "HTTP method. Current public functions use GET."},
+            "url": {"type": "string", "description": "Dodo IS API URL that would be called."},
+        },
+        "required": ["method", "url"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_pagination_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Pagination settings applied by the Bridge.",
+        "properties": {
+            "enabled": {"type": "boolean", "description": "Whether endpoint pagination is enabled."},
+            "take": {"type": "integer", "description": "Page size used by the Bridge."},
+            "max_pages": {"type": "integer", "description": "Maximum pages requested by the Bridge."},
+        },
+        "required": ["enabled"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_row_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "One Dodo IS row. Exact fields depend on endpoint and fields projection.",
+        "properties": {
+            "id": {
+                "type": "string",
+                "description": "Optional row id when Dodo IS returns one.",
+            }
+        },
+        "additionalProperties": True,
     }
 
 
