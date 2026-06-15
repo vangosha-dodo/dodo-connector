@@ -5,6 +5,12 @@ from fastapi import Header, HTTPException, Request
 from dodo_bridge.config import Settings
 
 
+def api_key_is_valid(settings: Settings, supplied: str | None) -> bool:
+    if not settings.api_keys:
+        return True
+    return bool(supplied and supplied in settings.api_keys)
+
+
 def authenticate_actor(
     request: Request,
     settings: Settings,
@@ -20,8 +26,7 @@ def authenticate_actor(
         bearer = authorization[7:].strip()
 
     supplied = x_bridge_key or bearer
-    if supplied in settings.api_keys:
+    if api_key_is_valid(settings, supplied):
         return x_actor or "api-key"
 
     raise HTTPException(status_code=401, detail="Invalid or missing bridge API key")
-

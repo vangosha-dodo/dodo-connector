@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     superset_password: str | None = Field(default=None, validation_alias="SUPERSET_PASSWORD")
     superset_access_token: str | None = Field(default=None, validation_alias="SUPERSET_ACCESS_TOKEN")
 
+    dodo_auth_helper_command: str | None = Field(
+        default=None,
+        validation_alias="DODO_AUTH_HELPER_COMMAND",
+    )
+    dodo_auth_command_timeout_seconds: int = Field(
+        default=180,
+        validation_alias="DODO_AUTH_COMMAND_TIMEOUT_SECONDS",
+    )
+
     @field_validator("api_keys", mode="before")
     @classmethod
     def parse_csv_list(cls, value: Any) -> list[str]:

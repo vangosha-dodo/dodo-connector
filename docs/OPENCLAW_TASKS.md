@@ -96,9 +96,11 @@ cookies, and handles MFA state. It uses pages such as:
 - OfficeManager `EmployeeList`;
 - admin `Infrastructure/Authenticate/Structure`.
 
-Bridge decision: keep this restricted and disabled. It touches saved browser
-sessions, cookies, MFA, and admin context. It should not be available as a normal
-ChatGPT business function.
+Bridge decision: keep this restricted and disabled as a ChatGPT business tool.
+The bridge now provides a separate internal `/auth/dodo` web flow for a human to
+refresh sessions and enter the email MFA code. It remains outside the LLM tool
+registry because it touches saved browser sessions, cookies, MFA, and admin
+context.
 
 ### 7. Measurements / Shop Window / UI Workflows
 
@@ -125,4 +127,3 @@ The first bridge allowlist is now:
 - `superset_clients_phone_share`: candidate, needs captured dashboard/chart id.
 - `dodo_auth_session_status`: restricted, disabled.
 - `dodo_create_write_off`: restricted write operation, disabled.
-

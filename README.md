@@ -47,6 +47,7 @@ OpenAPI is exposed at `http://127.0.0.1:8000/docs`.
 - `POST /tools/{tool_name}/invoke` - invoke a tool or dry-run it.
 - `POST /feedback` - attach human feedback to an audit event.
 - `GET /learning/recommendations` - policy/tooling recommendations from audit data.
+- `GET /auth/dodo` - internal web form for Dodo IS session refresh and email MFA code entry.
 
 ## First Tool Set
 
@@ -58,6 +59,14 @@ Active tools:
 - Dodo courier orders, staff shifts, and delivery statistics;
 - Dodo accounting sales and product write-offs;
 - constrained Superset employee-discount chart data.
+
+## Dodo IS Web Auth
+
+Open `/auth/dodo` after configuring `DODO_AUTH_HELPER_COMMAND`. The helper uses
+headless Chromium to check/refresh saved OfficeManager/admin Dodo IS sessions. If
+Dodo asks for an email MFA code, submit the fresh 6-digit code in the web form.
+
+The code is passed to the helper through stdin, not command-line arguments.
 
 ## Implementation Principle
 
