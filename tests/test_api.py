@@ -87,4 +87,5 @@ def make_settings(tmp_path: Path) -> Settings:
         policy_path=Path("configs/policy.example.yaml"),
         audit_db_path=tmp_path / "audit.sqlite3",
         dodo_access_token=None,
+        dodo_pizzerias_path=None,
     )

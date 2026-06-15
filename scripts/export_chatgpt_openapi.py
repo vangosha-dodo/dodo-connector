@@ -85,6 +85,36 @@ def build_schema(server_url: str) -> dict[str, Any]:
         "servers": [{"url": server_url}],
         "security": [{"bearerAuth": []}],
         "paths": {
+            "/dodo/pizzerias": {
+                "get": {
+                    "operationId": "listDodoPizzerias",
+                    "summary": "List available pizzerias",
+                    "description": (
+                        "Return pizzeria names, aliases, and Dodo unit ids. "
+                        "Use this before data requests when the user names a pizzeria instead of a unit id."
+                    ),
+                    "parameters": [
+                        {
+                            "name": "search",
+                            "in": "query",
+                            "required": False,
+                            "description": "Optional pizzeria name, alias, or unit id search.",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "include_non_pizzerias",
+                            "in": "query",
+                            "required": False,
+                            "description": "When true, include office/production units from the same Dodo catalog.",
+                            "schema": {"type": "boolean", "default": False},
+                        },
+                    ],
+                    "responses": successful_response(
+                        "Pizzeria catalog.",
+                        "#/components/schemas/DodoPizzeriasResponse",
+                    ),
+                }
+            },
             "/dodo/functions": {
                 "get": {
                     "operationId": "listDodoReadOnlyFunctions",
@@ -163,6 +193,8 @@ def build_schema(server_url: str) -> dict[str, Any]:
             "schemas": {
                 "DodoFunctionsResponse": dodo_functions_response_schema(),
                 "DodoFunction": dodo_function_schema(),
+                "DodoPizzeriasResponse": dodo_pizzerias_response_schema(),
+                "DodoPizzeria": dodo_pizzeria_schema(),
                 "DodoDataResponse": dodo_data_response_schema(),
                 "DodoRequest": dodo_request_schema(),
                 "DodoPagination": dodo_pagination_schema(),
@@ -220,6 +252,57 @@ def dodo_function_schema() -> dict[str, Any]:
             "paginated": {"type": "boolean", "description": "Whether pagination parameters are supported."},
         },
         "required": ["name", "description", "tool_name", "enabled", "allowed_by_policy", "paginated"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_pizzerias_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Pizzeria catalog used to map human names to Dodo IS unit ids.",
+        "properties": {
+            "pizzerias": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoPizzeria"},
+            },
+            "count": {"type": "integer", "description": "Number of returned records."},
+            "source": {"type": "string", "description": "Catalog source identifier."},
+            "include_non_pizzerias": {
+                "type": "boolean",
+                "description": "Whether office/production units were included.",
+            },
+        },
+        "required": ["pizzerias", "count", "source", "include_non_pizzerias"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_pizzeria_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "One Dodo IS unit from the pizzeria catalog.",
+        "properties": {
+            "unit_id": {"type": "string", "description": "Dodo IS unit id to pass as units parameter."},
+            "name": {"type": "string", "description": "Official unit name."},
+            "aliases": {
+                "type": "array",
+                "description": "Name variants useful for matching user wording.",
+                "items": {"type": "string"},
+            },
+            "country_code": {"type": "integer", "description": "Dodo country code."},
+            "business_id": {"type": "string", "description": "Dodo business id."},
+            "unit_type": {"type": "integer", "description": "Dodo unit type. Type 1 is a pizzeria."},
+            "is_pizzeria": {"type": "boolean", "description": "True for normal pizzeria units."},
+        },
+        "required": [
+            "unit_id",
+            "name",
+            "aliases",
+            "country_code",
+            "business_id",
+            "unit_type",
+            "is_pizzeria",
+        ],
         "additionalProperties": False,
     }
 

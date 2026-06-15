@@ -62,6 +62,10 @@ class Settings(BaseSettings):
         default=5000,
         validation_alias="DODO_DATA_MAX_ROWS",
     )
+    dodo_pizzerias_path: Path | None = Field(
+        default=None,
+        validation_alias="DODO_PIZZERIAS_PATH",
+    )
 
     superset_base_url: str | None = Field(default=None, validation_alias="SUPERSET_BASE_URL")
     superset_username: str | None = Field(default=None, validation_alias="SUPERSET_USERNAME")

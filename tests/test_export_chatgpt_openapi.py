@@ -9,6 +9,7 @@ def test_chatgpt_openapi_contains_only_dodo_get_paths() -> None:
     assert schema["openapi"] == "3.1.0"
     assert schema["servers"] == [{"url": "https://bridge.example.com"}]
     assert set(schema["paths"]) == {
+        "/dodo/pizzerias",
         "/dodo/functions",
         "/dodo/delivery/courier-orders",
         "/dodo/staff/shifts",
@@ -43,3 +44,14 @@ def test_chatgpt_openapi_object_schemas_have_properties() -> None:
     for name, component in object_schemas.items():
         assert "properties" in component, name
     assert "BridgeObjectResponse" not in schema["components"]["schemas"]
+
+
+def test_chatgpt_openapi_includes_pizzeria_catalog() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    operation = schema["paths"]["/dodo/pizzerias"]["get"]
+    assert operation["operationId"] == "listDodoPizzerias"
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/DodoPizzeriasResponse"
+    }
+    assert "DodoPizzeria" in schema["components"]["schemas"]

@@ -45,6 +45,7 @@ OpenAPI is exposed at `http://127.0.0.1:8000/docs`.
 - `GET /health` - service status.
 - `GET /tools` - declared tools and policy state.
 - `POST /tools/{tool_name}/invoke` - invoke a tool or dry-run it.
+- `GET /dodo/pizzerias` - pizzeria catalog with names, aliases, and Dodo unit ids.
 - `GET /dodo/functions` - Dodo IS data functions exposed by the bridge.
 - `GET /dodo/delivery/courier-orders` - courier delivery order rows.
 - `GET /dodo/staff/shifts` - staff/courier shifts.

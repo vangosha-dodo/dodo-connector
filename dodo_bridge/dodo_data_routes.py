@@ -13,6 +13,7 @@ from dodo_bridge.dodo_data import (
     parse_fields,
     validate_period,
 )
+from dodo_bridge.pizzerias import load_pizzerias
 from dodo_bridge.policy import PolicyEngine
 from dodo_bridge.registry import ToolRegistry
 from dodo_bridge.security import authenticate_actor
@@ -83,6 +84,24 @@ def list_dodo_functions(
 ) -> dict[str, Any]:
     del actor
     return {"functions": service.list_functions()}
+
+
+@router.get("/pizzerias")
+def list_pizzerias(
+    search: str | None = Query(default=None, description="Optional name, alias, or unit id search."),
+    include_non_pizzerias: bool = Query(
+        default=False,
+        description="When true, include office/production units from the same Dodo roles-units catalog.",
+    ),
+    settings: Settings = Depends(settings_dep),
+    actor: str = Depends(actor_dep),
+) -> dict[str, Any]:
+    del actor
+    return load_pizzerias(
+        settings.dodo_pizzerias_path,
+        search=search,
+        include_non_pizzerias=include_non_pizzerias,
+    )
 
 
 @router.get("/delivery/courier-orders")

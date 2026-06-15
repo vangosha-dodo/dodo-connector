@@ -21,6 +21,15 @@ Period length is capped by `DODO_DATA_MAX_PERIOD_DAYS`.
 
 ## Functions
 
+### Pizzerias
+
+```http
+GET /dodo/pizzerias?search=Архангельск
+```
+
+Returns pizzeria names, aliases, and Dodo unit ids. Use this endpoint before
+data requests when the user gives a pizzeria name instead of a `units` id.
+
 ### List Functions
 
 ```http
@@ -100,4 +109,3 @@ The response includes the exact Dodo API request URL that would be called.
 These functions still pass through the registry and policy engine. If a tool is
 disabled or removed from `configs/policy.example.yaml`, the corresponding route
 returns `403`.
-

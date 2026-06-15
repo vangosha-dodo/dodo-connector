@@ -123,5 +123,5 @@ def make_settings(
         audit_db_path=tmp_path / "audit.sqlite3",
         dodo_access_token=dodo_access_token,
         dodo_data_max_period_days=dodo_data_max_period_days,
+        dodo_pizzerias_path=None,
     )
-
