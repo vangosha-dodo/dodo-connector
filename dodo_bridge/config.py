@@ -33,6 +33,30 @@ class Settings(BaseSettings):
     )
     dodo_country: str = Field(default="ru", validation_alias="DODO_COUNTRY")
     dodo_access_token: str | None = Field(default=None, validation_alias="DODO_ACCESS_TOKEN")
+    dodo_data_max_period_days: int = Field(
+        default=92,
+        validation_alias="DODO_DATA_MAX_PERIOD_DAYS",
+    )
+    dodo_data_default_take: int = Field(
+        default=500,
+        validation_alias="DODO_DATA_DEFAULT_TAKE",
+    )
+    dodo_data_max_take: int = Field(
+        default=1000,
+        validation_alias="DODO_DATA_MAX_TAKE",
+    )
+    dodo_data_default_max_pages: int = Field(
+        default=5,
+        validation_alias="DODO_DATA_DEFAULT_MAX_PAGES",
+    )
+    dodo_data_max_pages: int = Field(
+        default=20,
+        validation_alias="DODO_DATA_MAX_PAGES",
+    )
+    dodo_data_max_rows: int = Field(
+        default=5000,
+        validation_alias="DODO_DATA_MAX_ROWS",
+    )
 
     superset_base_url: str | None = Field(default=None, validation_alias="SUPERSET_BASE_URL")
     superset_username: str | None = Field(default=None, validation_alias="SUPERSET_USERNAME")

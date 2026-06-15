@@ -12,6 +12,7 @@ from dodo_bridge.auth_routes import router as dodo_auth_router
 from dodo_bridge.config import Settings, get_settings
 from dodo_bridge.connectors.dodo import DodoConnector
 from dodo_bridge.connectors.superset import SupersetConnector
+from dodo_bridge.dodo_data_routes import router as dodo_data_router
 from dodo_bridge.learning import LearningEngine
 from dodo_bridge.models import (
     ConnectorName,
@@ -25,6 +26,7 @@ from dodo_bridge.security import authenticate_actor
 
 app = FastAPI(title="Dodo ChatGPT Bridge", version="0.1.0")
 app.include_router(dodo_auth_router)
+app.include_router(dodo_data_router)
 
 
 def settings_dep() -> Settings:

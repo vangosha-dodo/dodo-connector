@@ -14,7 +14,7 @@ class DodoConnector:
         self.settings = settings
 
     async def invoke(self, tool: ToolSpec, parameters: dict[str, Any], dry_run: bool) -> Any:
-        request = self._build_request(tool, parameters)
+        request = self.build_request(tool, parameters)
         if dry_run or not self.settings.dodo_access_token:
             return {
                 "dry_run": True,
@@ -33,7 +33,7 @@ class DodoConnector:
             response.raise_for_status()
             return response.json()
 
-    def _build_request(self, tool: ToolSpec, parameters: dict[str, Any]) -> dict[str, Any]:
+    def build_request(self, tool: ToolSpec, parameters: dict[str, Any]) -> dict[str, Any]:
         path = tool.path.replace("{country}", quote(self.settings.dodo_country))
         for key, value in parameters.items():
             placeholder = "{" + key + "}"
@@ -54,4 +54,3 @@ class DodoConnector:
         if tool.method != "GET":
             request["json"] = parameters.get("body", parameters)
         return request
-
