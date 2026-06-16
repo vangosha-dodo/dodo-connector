@@ -237,28 +237,6 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ),
                 }
             },
-            "/analytics/clients-phone-share": {
-                "post": {
-                    "operationId": "getClientsPhoneShare",
-                    "summary": "Get clients phone share from Superset",
-                    "description": (
-                        "Read-only approved Superset recipe for monthly share of dine-in cashier "
-                        "orders with identified clients. Does not write to Dodo IS, Superset, or Google Sheets."
-                    ),
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {
-                                "schema": {"$ref": "#/components/schemas/ClientsPhoneShareRequest"}
-                            }
-                        },
-                    },
-                    "responses": successful_response(
-                        "Clients phone share by unit.",
-                        "#/components/schemas/ClientsPhoneShareResponse",
-                    ),
-                }
-            },
             "/system/missing-capability": {
                 "post": {
                     "operationId": "reportMissingCapability",
@@ -476,12 +454,6 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "KioskSalesShareSummary": kiosk_sales_share_summary_schema(),
                 "KioskSalesShareRow": kiosk_sales_share_row_schema(),
                 "KioskSalesShareSupersetMeta": kiosk_sales_share_superset_meta_schema(),
-                "ClientsPhoneShareRequest": clients_phone_share_request_schema(),
-                "ClientsPhoneShareResponse": clients_phone_share_response_schema(),
-                "ClientsPhoneShareFilters": clients_phone_share_filters_schema(),
-                "ClientsPhoneShareSummary": clients_phone_share_summary_schema(),
-                "ClientsPhoneShareRow": clients_phone_share_row_schema(),
-                "ClientsPhoneShareSupersetMeta": clients_phone_share_superset_meta_schema(),
                 "MissingCapabilityRequest": missing_capability_request_schema(),
                 "MissingCapabilityPeriod": missing_capability_period_schema(),
                 "MissingCapabilityResponse": missing_capability_response_schema(),
@@ -990,120 +962,6 @@ def kiosk_sales_share_row_schema() -> dict[str, Any]:
 
 
 def kiosk_sales_share_superset_meta_schema() -> dict[str, Any]:
-    return {
-        "type": "object",
-        "properties": {
-            "dashboard": {"type": "string"},
-            "dashboard_id": {"type": "integer"},
-            "chart_id": {"type": "integer"},
-            "datasource_id": {"type": "integer"},
-            "metric": {"type": "string"},
-            "rowcount": {"type": "integer"},
-            "is_cached": {"type": "boolean"},
-        },
-        "required": ["dashboard_id", "chart_id", "datasource_id", "metric"],
-        "additionalProperties": False,
-    }
-
-
-def clients_phone_share_request_schema() -> dict[str, Any]:
-    return {
-        "type": "object",
-        "description": "Input for the clients phone share Superset capability.",
-        "properties": {
-            "month": {
-                "type": "string",
-                "description": "Target month in YYYY-MM format.",
-                "pattern": r"^\d{4}-\d{2}$",
-            },
-            "unit_names": {
-                "type": "array",
-                "description": "Superset UnitName values, for example Тамбов-3.",
-                "items": {"type": "string"},
-                "minItems": 1,
-            },
-            "row_limit": {"type": "integer", "minimum": 1, "maximum": 50000, "default": 50000},
-            "dry_run": {"type": "boolean", "default": False},
-        },
-        "required": ["month", "unit_names"],
-        "additionalProperties": False,
-    }
-
-
-def clients_phone_share_response_schema() -> dict[str, Any]:
-    return {
-        "type": "object",
-        "description": "Read-only clients phone share result from the approved Superset chart.",
-        "properties": {
-            "status": {"type": "string"},
-            "capability_id": {"type": "string"},
-            "source": {"type": "string"},
-            "filters": {"$ref": "#/components/schemas/ClientsPhoneShareFilters"},
-            "summary": {"$ref": "#/components/schemas/ClientsPhoneShareSummary"},
-            "rows": {
-                "type": "array",
-                "items": {"$ref": "#/components/schemas/ClientsPhoneShareRow"},
-            },
-            "warnings": {"type": "array", "items": {"type": "string"}},
-            "notes": {"type": "array", "items": {"type": "string"}},
-            "superset": {"$ref": "#/components/schemas/ClientsPhoneShareSupersetMeta"},
-            "request": {
-                "type": "object",
-                "description": "Planned Superset request for dry_run responses.",
-                "properties": {
-                    "method": {"type": "string"},
-                    "url": {"type": "string"},
-                    "json": {"type": "object", "properties": {}, "additionalProperties": True},
-                },
-                "additionalProperties": False,
-            },
-        },
-        "required": ["status", "capability_id", "source", "filters", "warnings"],
-        "additionalProperties": False,
-    }
-
-
-def clients_phone_share_filters_schema() -> dict[str, Any]:
-    return {
-        "type": "object",
-        "properties": {
-            "month": {"type": "string"},
-            "period": {"$ref": "#/components/schemas/EmployeeDiscountPeriod"},
-            "unit_names": {"type": "array", "items": {"type": "string"}},
-        },
-        "required": ["month", "unit_names"],
-        "additionalProperties": False,
-    }
-
-
-def clients_phone_share_summary_schema() -> dict[str, Any]:
-    return {
-        "type": "object",
-        "properties": {
-            "rows_count": {"type": "integer"},
-            "average_identified_orders_share_pct": {"type": "number"},
-        },
-        "required": ["rows_count"],
-        "additionalProperties": False,
-    }
-
-
-def clients_phone_share_row_schema() -> dict[str, Any]:
-    return {
-        "type": "object",
-        "properties": {
-            "unit_name": {"type": "string"},
-            "identified_orders_share": {"type": "number"},
-            "identified_orders_share_pct": {"type": "number"},
-            "identified_orders_count": {"type": "number"},
-            "orders_count": {"type": "number"},
-        },
-        "required": ["unit_name"],
-        "additionalProperties": False,
-    }
-
-
-def clients_phone_share_superset_meta_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {

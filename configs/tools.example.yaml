@@ -345,8 +345,8 @@ tools:
     base_url: https://officemanager.dodois.io
     dashboard_url: https://officemanager.dodois.io/OfficeManager/Analytics/Client_analytics
     risk_level: read
-    enabled: true
-    status: active
+    enabled: false
+    status: candidate
     required_params:
       - dashboard_id
       - chart_id
@@ -369,6 +369,7 @@ tools:
       - OpenClaw cron job "Клиенты с телефоном" uses Superset Client_analytics.
       - "Source metric from cron payload: Share of dine in identified orders via cashier."
       - OpenClaw automation captured dashboard 868, datasource 1615, and chart 18721.
+      - Live check on 2026-06-16 was blocked by stale OfficeManager/Superset session; OpenClaw script returned 401.
 
   - name: dodo_auth_session_status
     description: Check OfficeManager/admin Dodo IS saved session health without printing secrets.
