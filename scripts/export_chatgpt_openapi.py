@@ -85,6 +85,28 @@ def build_schema(server_url: str) -> dict[str, Any]:
         "servers": [{"url": server_url}],
         "security": [{"bearerAuth": []}],
         "paths": {
+            "/analytics/employee-discount": {
+                "post": {
+                    "operationId": "getEmployeeDiscount",
+                    "summary": "Get employee discount from Superset",
+                    "description": (
+                        "Return employee discount totals from the approved Superset recipe. "
+                        "Use this for questions like employee discount by pizzeria and period."
+                    ),
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/EmployeeDiscountRequest"}
+                            }
+                        },
+                    },
+                    "responses": successful_response(
+                        "Employee discount summary.",
+                        "#/components/schemas/EmployeeDiscountResponse",
+                    ),
+                }
+            },
             "/dodo/pizzerias": {
                 "get": {
                     "operationId": "listDodoPizzerias",
@@ -99,6 +121,13 @@ def build_schema(server_url: str) -> dict[str, Any]:
                             "in": "query",
                             "required": False,
                             "description": "Optional pizzeria name, alias, or unit id search.",
+                            "schema": {"type": "string"},
+                        },
+                        {
+                            "name": "query",
+                            "in": "query",
+                            "required": False,
+                            "description": "Alias for search. Use this for user-provided pizzeria text.",
                             "schema": {"type": "string"},
                         },
                         {
@@ -195,6 +224,13 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "DodoFunction": dodo_function_schema(),
                 "DodoPizzeriasResponse": dodo_pizzerias_response_schema(),
                 "DodoPizzeria": dodo_pizzeria_schema(),
+                "EmployeeDiscountRequest": employee_discount_request_schema(),
+                "EmployeeDiscountPeriod": employee_discount_period_schema(),
+                "EmployeeDiscountResponse": employee_discount_response_schema(),
+                "EmployeeDiscountFilters": employee_discount_filters_schema(),
+                "EmployeeDiscountSummary": employee_discount_summary_schema(),
+                "EmployeeDiscountRow": employee_discount_row_schema(),
+                "EmployeeDiscountSupersetMeta": employee_discount_superset_meta_schema(),
                 "DodoDataResponse": dodo_data_response_schema(),
                 "DodoRequest": dodo_request_schema(),
                 "DodoPagination": dodo_pagination_schema(),
@@ -344,6 +380,146 @@ def dodo_data_response_schema() -> dict[str, Any]:
             },
         },
         "required": ["function", "tool_name"],
+        "additionalProperties": False,
+    }
+
+
+def employee_discount_request_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Input for the employee discount Superset capability.",
+        "properties": {
+            "period": {"$ref": "#/components/schemas/EmployeeDiscountPeriod"},
+            "unit_names": {
+                "type": "array",
+                "description": "Superset UnitName values, for example Тамбов-3.",
+                "items": {"type": "string"},
+                "minItems": 1,
+            },
+            "group_by": {
+                "type": "array",
+                "description": "Optional grouping columns.",
+                "items": {"type": "string", "enum": ["unit", "action", "promocode"]},
+                "default": ["unit", "action", "promocode"],
+            },
+            "row_limit": {
+                "type": "integer",
+                "description": "Superset row limit.",
+                "minimum": 1,
+                "maximum": 50000,
+                "default": 50000,
+            },
+            "dry_run": {
+                "type": "boolean",
+                "description": "When true, return the planned Superset request without calling Superset.",
+                "default": False,
+            },
+        },
+        "required": ["period", "unit_names"],
+        "additionalProperties": False,
+    }
+
+
+def employee_discount_period_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Closed date interval in local business dates.",
+        "properties": {
+            "from": {"type": "string", "format": "date"},
+            "to": {"type": "string", "format": "date"},
+        },
+        "required": ["from", "to"],
+        "additionalProperties": False,
+    }
+
+
+def employee_discount_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Employee discount summary returned by the approved Superset recipe.",
+        "properties": {
+            "status": {"type": "string", "enum": ["ok", "dry_run", "partial", "no_data", "error"]},
+            "capability_id": {"type": "string"},
+            "source": {"type": "string"},
+            "filters": {"$ref": "#/components/schemas/EmployeeDiscountFilters"},
+            "summary": {"$ref": "#/components/schemas/EmployeeDiscountSummary"},
+            "rows": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/EmployeeDiscountRow"},
+            },
+            "warnings": {"type": "array", "items": {"type": "string"}},
+            "notes": {"type": "array", "items": {"type": "string"}},
+            "superset": {"$ref": "#/components/schemas/EmployeeDiscountSupersetMeta"},
+            "request": {
+                "type": "object",
+                "description": "Planned Superset request for dry_run responses.",
+                "properties": {
+                    "method": {"type": "string"},
+                    "url": {"type": "string"},
+                    "json": {"type": "object", "properties": {}, "additionalProperties": True},
+                },
+                "additionalProperties": False,
+            },
+        },
+        "required": ["status", "capability_id", "source"],
+        "additionalProperties": False,
+    }
+
+
+def employee_discount_filters_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "period": {"$ref": "#/components/schemas/EmployeeDiscountPeriod"},
+            "unit_names": {"type": "array", "items": {"type": "string"}},
+            "discount_type": {"type": "string"},
+        },
+        "required": ["period", "unit_names"],
+        "additionalProperties": False,
+    }
+
+
+def employee_discount_summary_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "employee_discount_amount": {"type": "number"},
+            "sales_without_discount": {"type": "number"},
+            "discount_share_of_sales_without_discount_pct": {"type": "number"},
+            "rows_count": {"type": "integer"},
+        },
+        "required": ["employee_discount_amount", "rows_count"],
+        "additionalProperties": False,
+    }
+
+
+def employee_discount_row_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "unit_name": {"type": "string"},
+            "discount_segment": {"type": "string"},
+            "bonus_action_uuid": {"type": "string"},
+            "action_name": {"type": "string"},
+            "promocode_masked": {"type": "string"},
+            "discount_amount": {"type": "number"},
+            "sales_without_discount": {"type": "number"},
+        },
+        "required": ["unit_name", "discount_amount"],
+        "additionalProperties": False,
+    }
+
+
+def employee_discount_superset_meta_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "dashboard_id": {"type": "integer"},
+            "chart_id": {"type": "integer"},
+            "rowcount": {"type": "integer"},
+            "is_cached": {"type": "boolean"},
+        },
+        "required": ["dashboard_id", "chart_id"],
         "additionalProperties": False,
     }
 

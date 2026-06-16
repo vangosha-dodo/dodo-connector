@@ -1,0 +1,88 @@
+id: get_employee_discount
+source_type: superset_api
+business_name: Дисконт по сотрудникам
+status: implemented_pending_live_validation
+owner: finance_or_ops_owner
+priority: P1
+allowed_roles:
+  - owner
+  - ops_director
+  - finance
+inputs:
+  period:
+    from: date
+    to: date
+  unit_names:
+    type: list[string]
+    note: Superset UnitName values, for example "Тамбов-3".
+  group_by:
+    default:
+      - unit
+      - action
+      - promocode
+source_recipe:
+  base_url: https://analytics.dodois.io
+  dashboard_url: https://analytics.dodois.io/superset/dashboard/p/LO35qvPb3D9/
+  dashboard_id: 1410
+  chart_id: 26708
+  datasource:
+    id: 3110
+    type: table
+  endpoint: /api/v1/chart/data?dashboard_id=1410
+  extraction_method: superset_chart_data_json
+  filters:
+    - col: UnitName
+      op: IN
+      input: unit_names
+    - col: ActionSegmentationAndSource
+      op: IN
+      value:
+        - Сотрудникам
+  time_range: "{period.from} : {period.to}"
+  granularity: SaleDate
+  metrics:
+    - Discount
+    - SalesWithoutDiscount
+  columns:
+    - UnitName
+    - ActionSegmentationAndSource
+    - BonusActionUUId
+    - ActionName
+    - PromocodeMasked
+validation:
+  - Superset response status is 200.
+  - Response contains result[0].data.
+  - Applied filters include requested UnitName values.
+  - Period in request equals requested period.
+  - Employee discount summary equals sum of Discount rows.
+output_schema:
+  summary:
+    employee_discount_amount: number
+    sales_without_discount: number
+    discount_share_of_sales_without_discount_pct: number_or_null
+    rows_count: integer
+  rows:
+    - unit_name
+    - discount_segment
+    - bonus_action_uuid
+    - action_name
+    - promocode_masked
+    - discount_amount
+    - sales_without_discount
+pii_policy:
+  default: aggregate_only
+  notes:
+    - Recipe does not request guest names, phones, addresses, or employee names.
+failure_modes:
+  missing_superset_session: Return dry_run or 502 with actionable warning.
+  source_changed: Mark capability as needs_maintenance.
+  no_rows: Return status no_data after live validation is implemented.
+test_cases:
+  - name: Тамбов-3 March 2026
+    request:
+      unit_names:
+        - Тамбов-3
+      period:
+        from: 2026-03-01
+        to: 2026-03-31
+    validation_source: Google Drive file "Маркетинг", sheet "Дисконт", row "Дисконт сотруднику".

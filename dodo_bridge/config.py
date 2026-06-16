@@ -71,6 +71,18 @@ class Settings(BaseSettings):
     superset_username: str | None = Field(default=None, validation_alias="SUPERSET_USERNAME")
     superset_password: str | None = Field(default=None, validation_alias="SUPERSET_PASSWORD")
     superset_access_token: str | None = Field(default=None, validation_alias="SUPERSET_ACCESS_TOKEN")
+    superset_session_cookies_path: Path | None = Field(
+        default=None,
+        validation_alias="SUPERSET_SESSION_COOKIES_PATH",
+    )
+    superset_browser_helper_command: str | None = Field(
+        default=None,
+        validation_alias="SUPERSET_BROWSER_HELPER_COMMAND",
+    )
+    superset_browser_command_timeout_seconds: int = Field(
+        default=180,
+        validation_alias="SUPERSET_BROWSER_COMMAND_TIMEOUT_SECONDS",
+    )
 
     dodo_auth_helper_command: str | None = Field(
         default=None,
@@ -88,6 +100,20 @@ class Settings(BaseSettings):
             return []
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("superset_session_cookies_path", mode="before")
+    @classmethod
+    def blank_path_to_none(cls, value: Any) -> Any:
+        if value == "":
+            return None
+        return value
+
+    @field_validator("superset_browser_helper_command", "dodo_auth_helper_command", mode="before")
+    @classmethod
+    def blank_string_to_none(cls, value: Any) -> Any:
+        if value == "":
+            return None
         return value
 
 

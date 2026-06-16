@@ -89,6 +89,7 @@ def list_dodo_functions(
 @router.get("/pizzerias")
 def list_pizzerias(
     search: str | None = Query(default=None, description="Optional name, alias, or unit id search."),
+    query: str | None = Query(default=None, description="Alias for search."),
     include_non_pizzerias: bool = Query(
         default=False,
         description="When true, include office/production units from the same Dodo roles-units catalog.",
@@ -99,7 +100,7 @@ def list_pizzerias(
     del actor
     return load_pizzerias(
         settings.dodo_pizzerias_path,
-        search=search,
+        search=search or query,
         include_non_pizzerias=include_non_pizzerias,
     )
 

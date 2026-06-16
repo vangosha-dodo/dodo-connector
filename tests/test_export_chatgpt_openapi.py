@@ -3,12 +3,13 @@ from __future__ import annotations
 from scripts.export_chatgpt_openapi import build_schema
 
 
-def test_chatgpt_openapi_contains_only_dodo_get_paths() -> None:
+def test_chatgpt_openapi_contains_expected_paths() -> None:
     schema = build_schema("https://bridge.example.com/")
 
     assert schema["openapi"] == "3.1.0"
     assert schema["servers"] == [{"url": "https://bridge.example.com"}]
     assert set(schema["paths"]) == {
+        "/analytics/employee-discount",
         "/dodo/pizzerias",
         "/dodo/functions",
         "/dodo/delivery/courier-orders",
@@ -17,8 +18,10 @@ def test_chatgpt_openapi_contains_only_dodo_get_paths() -> None:
         "/dodo/accounting/sales",
         "/dodo/accounting/writeoffs/products",
     }
-    for path_item in schema["paths"].values():
-        assert set(path_item) == {"get"}
+    for path, path_item in schema["paths"].items():
+        if path.startswith("/dodo/"):
+            assert set(path_item) == {"get"}
+    assert set(schema["paths"]["/analytics/employee-discount"]) == {"post"}
 
 
 def test_chatgpt_openapi_declares_bearer_auth() -> None:
@@ -55,3 +58,16 @@ def test_chatgpt_openapi_includes_pizzeria_catalog() -> None:
         "$ref": "#/components/schemas/DodoPizzeriasResponse"
     }
     assert "DodoPizzeria" in schema["components"]["schemas"]
+
+
+def test_chatgpt_openapi_includes_employee_discount() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    operation = schema["paths"]["/analytics/employee-discount"]["post"]
+    assert operation["operationId"] == "getEmployeeDiscount"
+    assert operation["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/EmployeeDiscountRequest"
+    }
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/EmployeeDiscountResponse"
+    }

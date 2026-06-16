@@ -1,0 +1,25 @@
+capabilities:
+  - id: resolve_pizzerias
+    type: resolver
+    endpoint: GET /dodo/pizzerias
+    description: Поиск пиццерий и сопоставление названий с unit_id.
+    pii_risk: low
+    status: production
+
+  - id: get_employee_discount
+    type: web_extraction
+    endpoint: POST /analytics/employee-discount
+    description: Дисконт по сотрудникам из утверждённого Superset отчёта.
+    source: superset_api
+    recipe_ref: recipes/get_employee_discount.yml
+    pii_risk: medium
+    owner: finance_or_ops_owner
+    status: implemented_pending_live_validation
+    metrics:
+      - employee_discount_amount
+      - sales_without_discount
+      - discount_share_of_sales_without_discount_pct
+    dimensions:
+      - unit
+      - action
+      - promocode

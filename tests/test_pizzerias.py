@@ -70,6 +70,21 @@ def test_dodo_pizzerias_route_returns_catalog(tmp_path) -> None:
     assert payload["pizzerias"][0]["unit_id"] == "unit-1"
 
 
+def test_dodo_pizzerias_route_accepts_query_alias(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get("/dodo/pizzerias", params={"query": "архангельск 2"})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 1
+    assert payload["pizzerias"][0]["unit_id"] == "unit-2"
+
+
 def write_units(tmp_path: Path) -> Path:
     path = tmp_path / "roles_units.json"
     path.write_text(

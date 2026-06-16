@@ -45,6 +45,7 @@ OpenAPI is exposed at `http://127.0.0.1:8000/docs`.
 - `GET /health` - service status.
 - `GET /tools` - declared tools and policy state.
 - `POST /tools/{tool_name}/invoke` - invoke a tool or dry-run it.
+- `POST /analytics/employee-discount` - employee discount from the approved Superset recipe.
 - `GET /dodo/pizzerias` - pizzeria catalog with names, aliases, and Dodo unit ids.
 - `GET /dodo/functions` - Dodo IS data functions exposed by the bridge.
 - `GET /dodo/delivery/courier-orders` - courier delivery order rows.
@@ -65,7 +66,8 @@ Active tools:
 
 - Dodo courier orders, staff shifts, and delivery statistics;
 - Dodo accounting sales and product write-offs;
-- constrained Superset employee-discount chart data.
+- constrained Superset employee-discount chart data exposed as an approved
+  business capability.
 
 The `/dodo/...` routes are the first ChatGPT-friendly functions for Dodo IS
 data. They validate period size, use the tool registry/policy allowlist, support
