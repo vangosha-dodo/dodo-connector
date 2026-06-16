@@ -39,14 +39,14 @@ def test_disabled_tool_is_blocked_and_audited(tmp_path) -> None:
     try:
         client = TestClient(app)
         response = client.post(
-            "/tools/superset_kiosk_sales_share/invoke",
+            "/tools/superset_clients_phone_share/invoke",
             json={
                 "parameters": {
                     "dashboard_id": 123,
                     "chart_id": 456,
-                    "metric": "Share sales via Kiosk",
+                    "metric": "Share of dine in identified orders via cashier",
                 },
-                "intent": "check kiosk share",
+                "intent": "check clients phone share",
             },
         )
     finally:

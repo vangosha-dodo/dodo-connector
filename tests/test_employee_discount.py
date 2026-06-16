@@ -100,6 +100,85 @@ def test_employee_discount_normalizes_superset_rows(tmp_path, monkeypatch) -> No
     assert payload["superset"]["chart_id"] == 26708
 
 
+def test_kiosk_sales_share_dry_run_builds_superset_request(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[analytics_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/analytics/kiosk-sales-share",
+            json={
+                "month": "2026-05",
+                "unit_names": ["Тамбов-1"],
+                "dry_run": True,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "dry_run"
+    assert payload["capability_id"] == "get_kiosk_sales_share"
+    assert payload["request"]["method"] == "POST"
+    assert payload["request"]["url"].endswith("/api/v1/chart/data?dashboard_id=714")
+    body = payload["request"]["json"]
+    assert body["form_data"]["slice_id"] == 9533
+    assert body["datasource"] == {"id": 168, "type": "table"}
+    assert body["queries"][0]["filters"][0] == {
+        "col": "UnitName",
+        "op": "IN",
+        "val": ["Тамбов-1"],
+    }
+    assert body["queries"][0]["metrics"] == ["Share sales via Kiosk"]
+    assert body["queries"][0]["time_range"] == "2026-05-01 : 2026-06-01"
+
+
+def test_kiosk_sales_share_normalizes_superset_rows(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, parameters, dry_run
+        return {
+            "result": [
+                {
+                    "rowcount": 2,
+                    "is_cached": False,
+                    "data": [
+                        {"UnitName": "Тамбов-1", "Share sales via Kiosk": 0.25},
+                        {"UnitName": "Тамбов-2", "Share sales via Kiosk": 0.1},
+                    ],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(SupersetConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, superset_base_url="https://analytics.dodois.io")
+    app.dependency_overrides[analytics_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/analytics/kiosk-sales-share",
+            json={
+                "month": "2026-05",
+                "unit_names": ["Тамбов-1", "Тамбов-2"],
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["summary"]["rows_count"] == 2
+    assert payload["summary"]["average_kiosk_sales_share_pct"] == 17.5
+    assert payload["rows"] == [
+        {"unit_name": "Тамбов-1", "kiosk_sales_share": 0.25, "kiosk_sales_share_pct": 25.0},
+        {"unit_name": "Тамбов-2", "kiosk_sales_share": 0.1, "kiosk_sales_share_pct": 10.0},
+    ]
+    assert payload["superset"]["dashboard_id"] == 714
+    assert payload["superset"]["chart_id"] == 9533
+    assert payload["superset"]["metric"] == "Share sales via Kiosk"
+
+
 def make_settings(
     tmp_path: Path,
     superset_base_url: str | None = None,

@@ -13,6 +13,7 @@ allowed_tools:
   - dodo_controlling_ratings_customer_experience
   - dodo_controlling_ratings_standards
   - superset_employee_discount_chart
+  - superset_kiosk_sales_share
 blocked_tools: []
 require_approval_for_risk:
   - write

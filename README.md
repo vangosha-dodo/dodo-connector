@@ -46,6 +46,7 @@ OpenAPI is exposed at `http://127.0.0.1:8000/docs`.
 - `GET /tools` - declared tools and policy state.
 - `POST /tools/{tool_name}/invoke` - invoke a tool or dry-run it.
 - `POST /analytics/employee-discount` - employee discount from the approved Superset recipe.
+- `POST /analytics/kiosk-sales-share` - monthly dine-in sales share via kiosks from the approved Superset recipe.
 - `POST /system/missing-capability` - record an internal backlog entry when the
   agent cannot answer with current approved read-only actions.
 - `GET /dodo/pizzerias` - pizzeria catalog with names, aliases, and Dodo unit ids.
@@ -80,6 +81,8 @@ Active tools:
 - Dodo unit month goals;
 - Dodo customer-experience and standards ratings;
 - constrained Superset employee-discount chart data exposed as an approved
+  business capability.
+- constrained Superset kiosk-sales-share chart data exposed as an approved
   business capability.
 
 The `/dodo/...` routes are the first ChatGPT-friendly functions for Dodo IS

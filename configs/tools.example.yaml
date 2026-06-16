@@ -312,14 +312,18 @@ tools:
     method: POST
     path: /api/v1/chart/data
     risk_level: read
-    enabled: false
-    status: candidate
+    enabled: true
+    status: active
     required_params:
       - dashboard_id
       - chart_id
       - metric
     allowed_query_params:
       - dashboard_id
+    allowed_dashboard_ids:
+      - 714
+    allowed_chart_ids:
+      - 9533
     allowed_metrics:
       - Share sales via Kiosk
     max_response_chars: 30000
@@ -331,6 +335,7 @@ tools:
     source_evidence:
       - OpenClaw cron job "Доля продаж через киоски" uses Superset ordres_types_analytics.
       - "Source metric from cron payload: Share sales via Kiosk."
+      - OpenClaw automation captured dashboard 714, datasource 168, and chart 9533.
 
   - name: superset_clients_phone_share
     description: Read approved Superset chart data for dine-in identified orders via cashier.

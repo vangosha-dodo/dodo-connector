@@ -79,6 +79,10 @@ marketing Google Sheet.
 Bridge decision: keep as a candidate until dashboard/chart ids are captured.
 Writing to Google Sheets is not part of the first ChatGPT bridge surface.
 
+Bridge update on 2026-06-16: exposed as a constrained read-only Superset
+capability for dashboard `714`, chart `9533`, datasource `168`, and metric
+`Share sales via Kiosk`. Google Sheets writing remains outside the Bridge.
+
 ### 5. Monthly Clients With Phone
 
 OpenClaw cron job `Клиенты с телефоном` uses Superset `Client_analytics` and the
@@ -123,7 +127,7 @@ The first bridge allowlist is now:
 
 ## Candidate / Restricted Tools
 
-- `superset_kiosk_sales_share`: candidate, needs captured dashboard/chart id.
+- `superset_kiosk_sales_share`: active read-only capability.
 - `superset_clients_phone_share`: candidate, needs captured dashboard/chart id.
 - `dodo_auth_session_status`: restricted, disabled.
 - `dodo_create_write_off`: restricted write operation, disabled.

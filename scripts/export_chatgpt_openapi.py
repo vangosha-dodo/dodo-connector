@@ -215,6 +215,28 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ),
                 }
             },
+            "/analytics/kiosk-sales-share": {
+                "post": {
+                    "operationId": "getKioskSalesShare",
+                    "summary": "Get kiosk sales share from Superset",
+                    "description": (
+                        "Read-only approved Superset recipe for monthly dine-in sales share via kiosks. "
+                        "Does not write to Dodo IS, Superset, or Google Sheets."
+                    ),
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/KioskSalesShareRequest"}
+                            }
+                        },
+                    },
+                    "responses": successful_response(
+                        "Kiosk sales share by unit.",
+                        "#/components/schemas/KioskSalesShareResponse",
+                    ),
+                }
+            },
             "/system/missing-capability": {
                 "post": {
                     "operationId": "reportMissingCapability",
@@ -426,6 +448,12 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "EmployeeDiscountSummary": employee_discount_summary_schema(),
                 "EmployeeDiscountRow": employee_discount_row_schema(),
                 "EmployeeDiscountSupersetMeta": employee_discount_superset_meta_schema(),
+                "KioskSalesShareRequest": kiosk_sales_share_request_schema(),
+                "KioskSalesShareResponse": kiosk_sales_share_response_schema(),
+                "KioskSalesShareFilters": kiosk_sales_share_filters_schema(),
+                "KioskSalesShareSummary": kiosk_sales_share_summary_schema(),
+                "KioskSalesShareRow": kiosk_sales_share_row_schema(),
+                "KioskSalesShareSupersetMeta": kiosk_sales_share_superset_meta_schema(),
                 "MissingCapabilityRequest": missing_capability_request_schema(),
                 "MissingCapabilityPeriod": missing_capability_period_schema(),
                 "MissingCapabilityResponse": missing_capability_response_schema(),
@@ -834,6 +862,118 @@ def employee_discount_superset_meta_schema() -> dict[str, Any]:
             "is_cached": {"type": "boolean"},
         },
         "required": ["dashboard_id", "chart_id"],
+        "additionalProperties": False,
+    }
+
+
+def kiosk_sales_share_request_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Input for the kiosk sales share Superset capability.",
+        "properties": {
+            "month": {
+                "type": "string",
+                "description": "Target month in YYYY-MM format.",
+                "pattern": r"^\d{4}-\d{2}$",
+            },
+            "unit_names": {
+                "type": "array",
+                "description": "Superset UnitName values, for example Тамбов-3.",
+                "items": {"type": "string"},
+                "minItems": 1,
+            },
+            "row_limit": {"type": "integer", "minimum": 1, "maximum": 50000, "default": 50000},
+            "dry_run": {"type": "boolean", "default": False},
+        },
+        "required": ["month", "unit_names"],
+        "additionalProperties": False,
+    }
+
+
+def kiosk_sales_share_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Read-only kiosk sales share result from the approved Superset chart.",
+        "properties": {
+            "status": {"type": "string"},
+            "capability_id": {"type": "string"},
+            "source": {"type": "string"},
+            "filters": {"$ref": "#/components/schemas/KioskSalesShareFilters"},
+            "summary": {"$ref": "#/components/schemas/KioskSalesShareSummary"},
+            "rows": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/KioskSalesShareRow"},
+            },
+            "warnings": {"type": "array", "items": {"type": "string"}},
+            "notes": {"type": "array", "items": {"type": "string"}},
+            "superset": {"$ref": "#/components/schemas/KioskSalesShareSupersetMeta"},
+            "request": {
+                "type": "object",
+                "description": "Planned Superset request for dry_run responses.",
+                "properties": {
+                    "method": {"type": "string"},
+                    "url": {"type": "string"},
+                    "json": {"type": "object", "properties": {}, "additionalProperties": True},
+                },
+                "additionalProperties": False,
+            },
+        },
+        "required": ["status", "capability_id", "source", "filters", "warnings"],
+        "additionalProperties": False,
+    }
+
+
+def kiosk_sales_share_filters_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "month": {"type": "string"},
+            "period": {"$ref": "#/components/schemas/EmployeeDiscountPeriod"},
+            "unit_names": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["month", "unit_names"],
+        "additionalProperties": False,
+    }
+
+
+def kiosk_sales_share_summary_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "rows_count": {"type": "integer"},
+            "average_kiosk_sales_share_pct": {"type": "number"},
+        },
+        "required": ["rows_count"],
+        "additionalProperties": False,
+    }
+
+
+def kiosk_sales_share_row_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "unit_name": {"type": "string"},
+            "kiosk_sales_share": {"type": "number"},
+            "kiosk_sales_share_pct": {"type": "number"},
+        },
+        "required": ["unit_name"],
+        "additionalProperties": False,
+    }
+
+
+def kiosk_sales_share_superset_meta_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "dashboard": {"type": "string"},
+            "dashboard_id": {"type": "integer"},
+            "chart_id": {"type": "integer"},
+            "datasource_id": {"type": "integer"},
+            "metric": {"type": "string"},
+            "rowcount": {"type": "integer"},
+            "is_cached": {"type": "boolean"},
+        },
+        "required": ["dashboard_id", "chart_id", "datasource_id", "metric"],
         "additionalProperties": False,
     }
 
