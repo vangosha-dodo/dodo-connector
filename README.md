@@ -57,6 +57,7 @@ OpenAPI is exposed at `http://127.0.0.1:8000/docs`.
 - `GET /dodo/accounting/sales` - accounting sales rows.
 - `GET /dodo/accounting/writeoffs/products` - product write-off rows.
 - `GET /dodo/accounting/inventory-stocks` - inventory balances and runout estimates.
+- `GET /dodo/accounting/stock-consumptions-by-period` - ingredient consumption by period.
 - `GET /dodo/ratings/customer-experience` - customer experience ratings by unit or country.
 - `GET /dodo/ratings/standards` - standards ratings by unit or country.
 - `POST /feedback` - attach human feedback to an audit event.
@@ -74,6 +75,7 @@ Active tools:
 - Dodo open vacancy counts;
 - Dodo accounting sales and product write-offs;
 - Dodo inventory stock balances;
+- Dodo stock consumptions by period;
 - Dodo customer-experience and standards ratings;
 - constrained Superset employee-discount chart data exposed as an approved
   business capability.

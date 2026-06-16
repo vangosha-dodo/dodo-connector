@@ -179,6 +179,34 @@ tools:
       - Live Dodo API check on 2026-06-16 returned stocks, isEndOfListReached, quantity, balanceInMoney, and daysUntilBalanceRunsOut.
       - Endpoint accepts units, from, to, take, and skip.
 
+  - name: dodo_accounting_stock_consumptions_by_period
+    description: Read Dodo IS stock consumption rows by unit and period.
+    connector: dodo
+    method: GET
+    path: /dodopizza/{country}/accounting/stock-consumptions-by-period
+    risk_level: read
+    enabled: true
+    status: active
+    required_params:
+      - units
+      - from
+      - to
+    allowed_query_params:
+      - units
+      - from
+      - to
+      - skip
+      - take
+    max_response_chars: 30000
+    tags:
+      - api-priority
+      - inventory
+      - consumptions
+      - management
+    source_evidence:
+      - Live Dodo API check on 2026-06-16 returned consumptions, isEndOfListReached, consumptionType, quantity, costWithVat, and costWithoutVat.
+      - Endpoint accepts units, from, to, take, and skip.
+
   - name: dodo_controlling_ratings_customer_experience
     description: Read Dodo IS customer experience ratings by unit or country.
     connector: dodo

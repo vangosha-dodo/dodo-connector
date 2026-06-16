@@ -354,6 +354,17 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "responses": data_response("Inventory stock rows."),
                 }
             },
+            "/dodo/accounting/stock-consumptions-by-period": {
+                "get": {
+                    "operationId": "getDodoAccountingStockConsumptionsByPeriod",
+                    "summary": "Get stock consumptions by period",
+                    "description": (
+                        "Read Dodo IS ingredient stock consumption rows for selected units and period."
+                    ),
+                    "parameters": COMMON_PERIOD_PARAMETERS + PAGINATION_PARAMETERS,
+                    "responses": data_response("Stock consumption rows."),
+                }
+            },
         },
         "components": {
             "securitySchemes": {

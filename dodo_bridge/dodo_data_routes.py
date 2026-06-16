@@ -274,6 +274,29 @@ async def accounting_inventory_stocks(
     )
 
 
+@router.get("/accounting/stock-consumptions-by-period")
+async def accounting_stock_consumptions_by_period(
+    units: str = Query(..., description="Comma-separated Dodo unit ids."),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    fields: str | None = Query(default=None, description="Optional comma-separated row fields."),
+    take: int | None = Query(default=None, ge=1),
+    max_pages: int | None = Query(default=None, ge=1),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _period_params(context.settings, units, from_date, to_date)
+    return await _fetch(
+        context,
+        function_name="accounting_stock_consumptions_by_period",
+        parameters=params,
+        dry_run=dry_run,
+        fields=fields,
+        take=take,
+        max_pages=max_pages,
+    )
+
+
 @router.get("/ratings/customer-experience")
 async def ratings_customer_experience(
     units: str | None = Query(default=None, description="Comma-separated Dodo unit ids."),

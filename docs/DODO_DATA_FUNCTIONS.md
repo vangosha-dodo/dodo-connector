@@ -134,6 +134,22 @@ Returns stock balance rows such as `quantity`, `balanceInMoney`,
 `avgWeekdayExpense`, `avgWeekendExpense`, `daysUntilBalanceRunsOut`, and
 `calculatedAt`.
 
+### Stock Consumptions By Period
+
+```http
+GET /dodo/accounting/stock-consumptions-by-period?units=<unit-id>&from=2026-06-01&to=2026-06-02&take=100
+```
+
+Uses:
+
+```text
+GET /dodopizza/{country}/accounting/stock-consumptions-by-period
+```
+
+Returns ingredient consumption rows such as `unitName`, `consumptionType`,
+`stockItemName`, `measurementUnit`, `quantity`, `costWithVat`,
+`costWithoutVat`, and `currency`.
+
 ### Customer Experience Rating
 
 ```http

@@ -68,6 +68,12 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         description="Inventory stock balance rows.",
         row_keys=("stocks", "inventoryStocks", "items"),
     ),
+    "accounting_stock_consumptions_by_period": DodoDataFunction(
+        name="accounting_stock_consumptions_by_period",
+        tool_name="dodo_accounting_stock_consumptions_by_period",
+        description="Stock consumption rows by period.",
+        row_keys=("consumptions", "stockConsumptions", "items"),
+    ),
     "ratings_customer_experience": DodoDataFunction(
         name="ratings_customer_experience",
         tool_name="dodo_controlling_ratings_customer_experience",

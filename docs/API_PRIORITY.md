@@ -27,7 +27,7 @@ Reviewed on 2026-06-16 against the current Bridge code and live Dodo API access.
 5. `stock_consumptions_by_period`
    - Source: `GET /dodopizza/{country}/accounting/stock-consumptions-by-period`
    - Why: ingredient usage efficiency and anomaly detection.
-   - Status: candidate, parameters still need live verification.
+   - Status: implemented in Bridge.
 
 6. `new_clients_statistics`
    - Source: `GET /dodopizza/{country}/orders/clients-statistics`

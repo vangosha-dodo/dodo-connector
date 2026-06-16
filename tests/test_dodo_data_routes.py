@@ -21,6 +21,7 @@ def test_dodo_functions_list(tmp_path) -> None:
     names = {item["name"] for item in response.json()["functions"]}
     assert "accounting_sales" in names
     assert "accounting_inventory_stocks" in names
+    assert "accounting_stock_consumptions_by_period" in names
     assert "courier_orders" in names
     assert "ratings_customer_experience" in names
     assert "staff_vacancies_count" in names
@@ -163,6 +164,96 @@ def test_dodo_accounting_inventory_stocks_paginates_and_projects(tmp_path, monke
         {"id": "i1", "quantity": 10, "daysUntilBalanceRunsOut": 3},
         {"id": "i2", "quantity": 20, "daysUntilBalanceRunsOut": 5},
         {"id": "i3", "quantity": 30, "daysUntilBalanceRunsOut": 7},
+    ]
+
+
+def test_dodo_accounting_stock_consumptions_by_period_dry_run(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/stock-consumptions-by-period",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-02",
+                "dry_run": "true",
+                "take": "1",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "accounting_stock_consumptions_by_period"
+    assert payload["dry_run"] is True
+    assert "/accounting/stock-consumptions-by-period" in payload["request"]["url"]
+    assert "take=1" in payload["request"]["url"]
+
+
+def test_dodo_accounting_stock_consumptions_by_period_paginates_and_projects(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        if parameters["skip"] == 0:
+            return {
+                "consumptions": [
+                    {
+                        "stockItemName": "Cheese",
+                        "quantity": 10,
+                        "costWithVat": 100,
+                        "costWithoutVat": 83,
+                        "currency": "RUB",
+                    },
+                    {
+                        "stockItemName": "Tomato",
+                        "quantity": 20,
+                        "costWithVat": 200,
+                        "costWithoutVat": 167,
+                        "currency": "RUB",
+                    },
+                ]
+            }
+        return {
+            "consumptions": [
+                {
+                    "stockItemName": "Sauce",
+                    "quantity": 30,
+                    "costWithVat": 300,
+                    "costWithoutVat": 250,
+                    "currency": "RUB",
+                },
+            ]
+        }
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/stock-consumptions-by-period",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-02",
+                "take": "2",
+                "max_pages": "2",
+                "fields": "stockItemName,quantity,costWithVat",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["row_count"] == 3
+    assert payload["pages_fetched"] == 2
+    assert payload["rows"] == [
+        {"stockItemName": "Cheese", "quantity": 10, "costWithVat": 100},
+        {"stockItemName": "Tomato", "quantity": 20, "costWithVat": 200},
+        {"stockItemName": "Sauce", "quantity": 30, "costWithVat": 300},
     ]
 
 
