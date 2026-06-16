@@ -113,6 +113,37 @@ RATINGS_PARAMETERS: list[dict[str, Any]] = [
     },
 ]
 
+MONTH_GOALS_PARAMETERS: list[dict[str, Any]] = [
+    {
+        "name": "unit",
+        "in": "query",
+        "required": True,
+        "description": "Dodo unit id.",
+        "schema": {"type": "string"},
+    },
+    {
+        "name": "month",
+        "in": "query",
+        "required": True,
+        "description": "Month number, 1-12.",
+        "schema": {"type": "integer", "minimum": 1, "maximum": 12},
+    },
+    {
+        "name": "year",
+        "in": "query",
+        "required": True,
+        "description": "Calendar year.",
+        "schema": {"type": "integer", "minimum": 2000, "maximum": 2100},
+    },
+    {
+        "name": "dry_run",
+        "in": "query",
+        "required": False,
+        "description": "When true, return the planned Dodo IS GET request without calling Dodo IS.",
+        "schema": {"type": "boolean", "default": False},
+    },
+]
+
 OPTIONAL_UNIT_COUNTRY_PARAMETERS: list[dict[str, Any]] = [
     {
         "name": "units",
@@ -363,6 +394,15 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ),
                     "parameters": COMMON_PERIOD_PARAMETERS + PAGINATION_PARAMETERS,
                     "responses": data_response("Stock consumption rows."),
+                }
+            },
+            "/dodo/units/month-goals": {
+                "get": {
+                    "operationId": "getDodoUnitMonthGoals",
+                    "summary": "Get unit month goals",
+                    "description": "Read Dodo IS monthly goal values for one unit.",
+                    "parameters": MONTH_GOALS_PARAMETERS,
+                    "responses": data_response("Unit month goal values."),
                 }
             },
         },

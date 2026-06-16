@@ -23,6 +23,7 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
         "/dodo/accounting/writeoffs/products",
         "/dodo/accounting/inventory-stocks",
         "/dodo/accounting/stock-consumptions-by-period",
+        "/dodo/units/month-goals",
     }
     for path, path_item in schema["paths"].items():
         if path.startswith("/dodo/"):
@@ -119,6 +120,18 @@ def test_chatgpt_openapi_includes_stock_consumptions_by_period() -> None:
 
     operation = schema["paths"]["/dodo/accounting/stock-consumptions-by-period"]["get"]
     assert operation["operationId"] == "getDodoAccountingStockConsumptionsByPeriod"
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/DodoDataResponse"
+    }
+
+
+def test_chatgpt_openapi_includes_unit_month_goals() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    operation = schema["paths"]["/dodo/units/month-goals"]["get"]
+    assert operation["operationId"] == "getDodoUnitMonthGoals"
+    parameter_names = {item["name"] for item in operation["parameters"]}
+    assert {"unit", "month", "year", "dry_run"} <= parameter_names
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/DodoDataResponse"
     }

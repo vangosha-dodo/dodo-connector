@@ -9,6 +9,7 @@ allowed_tools:
   - dodo_accounting_writeoffs_products
   - dodo_accounting_inventory_stocks
   - dodo_accounting_stock_consumptions_by_period
+  - dodo_units_month_goals
   - dodo_controlling_ratings_customer_experience
   - dodo_controlling_ratings_standards
   - superset_employee_discount_chart

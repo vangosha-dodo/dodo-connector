@@ -74,6 +74,13 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         description="Stock consumption rows by period.",
         row_keys=("consumptions", "stockConsumptions", "items"),
     ),
+    "units_month_goals": DodoDataFunction(
+        name="units_month_goals",
+        tool_name="dodo_units_month_goals",
+        description="Monthly target values for one unit.",
+        row_keys=(),
+        paginated=False,
+    ),
     "ratings_customer_experience": DodoDataFunction(
         name="ratings_customer_experience",
         tool_name="dodo_controlling_ratings_customer_experience",

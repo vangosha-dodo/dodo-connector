@@ -150,6 +150,22 @@ Returns ingredient consumption rows such as `unitName`, `consumptionType`,
 `stockItemName`, `measurementUnit`, `quantity`, `costWithVat`,
 `costWithoutVat`, and `currency`.
 
+### Unit Month Goals
+
+```http
+GET /dodo/units/month-goals?unit=<unit-id>&month=6&year=2026
+```
+
+Uses:
+
+```text
+GET /dodopizza/{country}/units/month-goals
+```
+
+Returns monthly target values such as `sales`, `deliverySales`,
+`salesPerPerson`, `productsPerPerson`, `leakage`,
+`writeOffsDueToDefectiveProduct`, and `defectiveProduct`.
+
 ### Customer Experience Rating
 
 ```http

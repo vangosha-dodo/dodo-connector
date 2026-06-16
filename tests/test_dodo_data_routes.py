@@ -25,6 +25,7 @@ def test_dodo_functions_list(tmp_path) -> None:
     assert "courier_orders" in names
     assert "ratings_customer_experience" in names
     assert "staff_vacancies_count" in names
+    assert "units_month_goals" in names
 
 
 def test_dodo_accounting_sales_dry_run(tmp_path) -> None:
@@ -255,6 +256,73 @@ def test_dodo_accounting_stock_consumptions_by_period_paginates_and_projects(tmp
         {"stockItemName": "Tomato", "quantity": 20, "costWithVat": 200},
         {"stockItemName": "Sauce", "quantity": 30, "costWithVat": 300},
     ]
+
+
+def test_dodo_units_month_goals_dry_run(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/units/month-goals",
+            params={
+                "unit": "unit-1",
+                "month": "6",
+                "year": "2026",
+                "dry_run": "true",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "units_month_goals"
+    assert payload["dry_run"] is True
+    assert "/units/month-goals" in payload["request"]["url"]
+    assert "unit=unit-1" in payload["request"]["url"]
+    assert "month=6" in payload["request"]["url"]
+    assert "year=2026" in payload["request"]["url"]
+
+
+def test_dodo_units_month_goals_returns_raw_response(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        assert parameters == {"unit": "unit-1", "month": 6, "year": 2026}
+        return {
+            "sales": 100000,
+            "deliverySales": 25000,
+            "leakage": 3,
+            "defectiveProduct": 2,
+        }
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/units/month-goals",
+            params={
+                "unit": "unit-1",
+                "month": "6",
+                "year": "2026",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "units_month_goals"
+    assert payload["row_count"] is None
+    assert payload["rows_key"] is None
+    assert payload["response"] == {
+        "sales": 100000,
+        "deliverySales": 25000,
+        "leakage": 3,
+        "defectiveProduct": 2,
+    }
 
 
 def test_dodo_staff_vacancies_count_dry_run(tmp_path) -> None:

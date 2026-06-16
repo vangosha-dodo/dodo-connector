@@ -32,7 +32,7 @@ Reviewed on 2026-06-16 against the current Bridge code and live Dodo API access.
 6. `new_clients_statistics`
    - Source: `GET /dodopizza/{country}/orders/clients-statistics`
    - Why: customer growth and marketing effectiveness.
-   - Status: current endpoint path returned `404`; needs source verification before implementation.
+   - Status: blocked by missing Dodo scope `orders`; live check with `units`, `fromDate`, and `toDate` returned `403 InsufficientScopes`.
 
 7. `production_orders_handover_time`
    - Source: `GET /dodopizza/{country}/production/orders-handover-time`
@@ -47,12 +47,12 @@ Reviewed on 2026-06-16 against the current Bridge code and live Dodo API access.
 9. `staff_schedules_forecast`
    - Source: `GET /dodopizza/{country}/staff/schedules/forecast`
    - Why: labor planning and over/under-staffing prevention.
-   - Status: candidate, parameters known, live verification pending.
+   - Status: blocked by live `404`; official docs exist, but current access/path needs separate verification.
 
 10. `units_month_goals`
     - Source: `GET /dodopizza/{country}/units/month-goals`
     - Why: plan/fact management and execution tracking.
-    - Status: current endpoint path returned `404`; needs source verification before implementation.
+    - Status: implemented in Bridge.
 
 ## Notes
 

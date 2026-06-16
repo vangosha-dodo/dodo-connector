@@ -297,6 +297,30 @@ async def accounting_stock_consumptions_by_period(
     )
 
 
+@router.get("/units/month-goals")
+async def units_month_goals(
+    unit: str = Query(..., description="Dodo unit id."),
+    month: int = Query(..., ge=1, le=12, description="Month number, 1-12."),
+    year: int = Query(..., ge=2000, le=2100, description="Calendar year."),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = {
+        "unit": normalize_units(unit),
+        "month": month,
+        "year": year,
+    }
+    return await _fetch(
+        context,
+        function_name="units_month_goals",
+        parameters=params,
+        dry_run=dry_run,
+        fields=None,
+        take=None,
+        max_pages=None,
+    )
+
+
 @router.get("/ratings/customer-experience")
 async def ratings_customer_experience(
     units: str | None = Query(default=None, description="Comma-separated Dodo unit ids."),
