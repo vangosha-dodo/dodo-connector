@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
 from dodo_bridge.audit import AuditStore
 from dodo_bridge.config import Settings, get_settings
@@ -225,6 +225,58 @@ async def accounting_writeoffs_products(
     )
 
 
+@router.get("/ratings/customer-experience")
+async def ratings_customer_experience(
+    units: str | None = Query(default=None, description="Comma-separated Dodo unit ids."),
+    country_code: int | None = Query(
+        default=None,
+        alias="countryCode",
+        description="Optional Dodo country code. Use when requesting country-level ratings.",
+    ),
+    fields: str | None = Query(default=None, description="Optional comma-separated row fields."),
+    take: int | None = Query(default=None, ge=1),
+    max_pages: int | None = Query(default=None, ge=1),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _ratings_params(units=units, country_code=country_code)
+    return await _fetch(
+        context,
+        function_name="ratings_customer_experience",
+        parameters=params,
+        dry_run=dry_run,
+        fields=fields,
+        take=take,
+        max_pages=max_pages,
+    )
+
+
+@router.get("/ratings/standards")
+async def ratings_standards(
+    units: str | None = Query(default=None, description="Comma-separated Dodo unit ids."),
+    country_code: int | None = Query(
+        default=None,
+        alias="countryCode",
+        description="Optional Dodo country code. Use when requesting country-level ratings.",
+    ),
+    fields: str | None = Query(default=None, description="Optional comma-separated row fields."),
+    take: int | None = Query(default=None, ge=1),
+    max_pages: int | None = Query(default=None, ge=1),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _ratings_params(units=units, country_code=country_code)
+    return await _fetch(
+        context,
+        function_name="ratings_standards",
+        parameters=params,
+        dry_run=dry_run,
+        fields=fields,
+        take=take,
+        max_pages=max_pages,
+    )
+
+
 def _period_params(
     settings: Settings,
     units: str,
@@ -237,6 +289,17 @@ def _period_params(
         "from": from_date.isoformat(),
         "to": to_date.isoformat(),
     }
+
+
+def _ratings_params(*, units: str | None, country_code: int | None) -> dict[str, Any]:
+    params: dict[str, Any] = {}
+    if units:
+        params["units"] = normalize_units(units)
+    if country_code is not None:
+        params["countryCode"] = country_code
+    if not params:
+        raise HTTPException(status_code=422, detail="Provide either 'units' or 'countryCode'")
+    return params
 
 
 async def _fetch(

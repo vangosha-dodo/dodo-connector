@@ -1,0 +1,61 @@
+# Dodo API Priority for Management Decisions
+
+Reviewed on 2026-06-16 against the current Bridge code and live Dodo API access.
+
+## Priority Order
+
+1. `customer_experience_rating`
+   - Source: `GET /controlling/ratings/customer-experience`
+   - Why: direct weekly quality KPI for unit/country management.
+   - Status: implemented in Bridge.
+
+2. `standards_rating`
+   - Source: `GET /controlling/ratings/standards`
+   - Why: operational discipline and audit compliance KPI.
+   - Status: implemented in Bridge.
+
+3. `inventory_stocks`
+   - Source: `GET /dodopizza/{country}/accounting/inventory-stocks`
+   - Why: stock balance, money in stock, and `daysUntilBalanceRunsOut`.
+   - Status: verified live, next implementation target.
+
+4. `staff_vacancies_count`
+   - Source: `GET /dodopizza/{country}/staff/vacancies/count`
+   - Why: staffing gaps for recruiting and expansion decisions.
+   - Status: verified live, not yet exposed.
+
+5. `stock_consumptions_by_period`
+   - Source: `GET /dodopizza/{country}/accounting/stock-consumptions-by-period`
+   - Why: ingredient usage efficiency and anomaly detection.
+   - Status: candidate, parameters still need live verification.
+
+6. `new_clients_statistics`
+   - Source: `GET /dodopizza/{country}/orders/clients-statistics`
+   - Why: customer growth and marketing effectiveness.
+   - Status: current endpoint path returned `404`; needs source verification before implementation.
+
+7. `production_orders_handover_time`
+   - Source: `GET /dodopizza/{country}/production/orders-handover-time`
+   - Why: one of the strongest operational service-speed KPIs.
+   - Status: blocked by missing Dodo scope `productionefficiency`.
+
+8. `production_productivity`
+   - Source: `GET /dodopizza/{country}/production/productivity`
+   - Why: kitchen throughput and labor efficiency.
+   - Status: blocked by missing Dodo scope `productionefficiency`.
+
+9. `staff_schedules_forecast`
+   - Source: `GET /dodopizza/{country}/staff/schedules/forecast`
+   - Why: labor planning and over/under-staffing prevention.
+   - Status: candidate, parameters known, live verification pending.
+
+10. `units_month_goals`
+    - Source: `GET /dodopizza/{country}/units/month-goals`
+    - Why: plan/fact management and execution tracking.
+    - Status: current endpoint path returned `404`; needs source verification before implementation.
+
+## Notes
+
+- We are prioritizing endpoints that are both management-useful and safe as read-only.
+- Some endpoints are strategically higher-value but currently blocked by token scopes.
+- Superset candidates stay separate and will be resumed after the API priority block.

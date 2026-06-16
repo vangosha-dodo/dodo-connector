@@ -129,6 +129,50 @@ tools:
     source_evidence:
       - OpenClaw export tambov1_slices_sales_writeoffs_2026-06-10_raw.json cites accounting/write-offs/products.
 
+  - name: dodo_controlling_ratings_customer_experience
+    description: Read Dodo IS customer experience ratings by unit or country.
+    connector: dodo
+    method: GET
+    path: /controlling/ratings/customer-experience
+    risk_level: read
+    enabled: true
+    status: active
+    allowed_query_params:
+      - units
+      - countryCode
+      - skip
+      - take
+    max_response_chars: 30000
+    tags:
+      - api-priority
+      - ratings
+      - management
+    source_evidence:
+      - Live Dodo API check on 2026-06-16 returned periodFrom, periodTo, publishStatus, publishedAt, and unitRates.
+      - Endpoint accepts either units or countryCode and supports take/skip pagination.
+
+  - name: dodo_controlling_ratings_standards
+    description: Read Dodo IS standards ratings by unit or country.
+    connector: dodo
+    method: GET
+    path: /controlling/ratings/standards
+    risk_level: read
+    enabled: true
+    status: active
+    allowed_query_params:
+      - units
+      - countryCode
+      - skip
+      - take
+    max_response_chars: 30000
+    tags:
+      - api-priority
+      - ratings
+      - management
+    source_evidence:
+      - Live Dodo API check on 2026-06-16 returned periodFrom, periodTo, publishStatus, publishedAt, and unitRates.
+      - Endpoint accepts either units or countryCode and supports take/skip pagination.
+
   - name: superset_employee_discount_chart
     description: Read the approved Superset employee discount chart data for discount reconciliation.
     connector: superset

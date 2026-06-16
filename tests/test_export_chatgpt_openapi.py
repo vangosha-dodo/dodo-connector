@@ -13,6 +13,8 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
         "/system/missing-capability",
         "/dodo/pizzerias",
         "/dodo/functions",
+        "/dodo/ratings/customer-experience",
+        "/dodo/ratings/standards",
         "/dodo/delivery/courier-orders",
         "/dodo/staff/shifts",
         "/dodo/delivery/statistics",
@@ -85,3 +87,15 @@ def test_chatgpt_openapi_includes_missing_capability_report() -> None:
     }
     response = schema["components"]["schemas"]["MissingCapabilityResponse"]
     assert response["properties"]["dodo_is_changed"]["const"] is False
+
+
+def test_chatgpt_openapi_includes_ratings_routes() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    customer = schema["paths"]["/dodo/ratings/customer-experience"]["get"]
+    standards = schema["paths"]["/dodo/ratings/standards"]["get"]
+    assert customer["operationId"] == "getDodoCustomerExperienceRatings"
+    assert standards["operationId"] == "getDodoStandardsRatings"
+    assert customer["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/DodoDataResponse"
+    }

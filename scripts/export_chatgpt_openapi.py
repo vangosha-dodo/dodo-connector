@@ -68,6 +68,51 @@ PAGINATION_PARAMETERS: list[dict[str, Any]] = [
     },
 ]
 
+RATINGS_PARAMETERS: list[dict[str, Any]] = [
+    {
+        "name": "units",
+        "in": "query",
+        "required": False,
+        "description": "Comma-separated Dodo unit ids. Provide this or countryCode.",
+        "schema": {"type": "string"},
+    },
+    {
+        "name": "countryCode",
+        "in": "query",
+        "required": False,
+        "description": "Dodo country code. Provide this or units.",
+        "schema": {"type": "integer"},
+    },
+    {
+        "name": "fields",
+        "in": "query",
+        "required": False,
+        "description": "Optional comma-separated response fields to keep.",
+        "schema": {"type": "string"},
+    },
+    {
+        "name": "dry_run",
+        "in": "query",
+        "required": False,
+        "description": "When true, return the planned Dodo API GET request without calling Dodo IS.",
+        "schema": {"type": "boolean", "default": False},
+    },
+    {
+        "name": "take",
+        "in": "query",
+        "required": False,
+        "description": "Optional page size for the ratings feed.",
+        "schema": {"type": "integer", "minimum": 1},
+    },
+    {
+        "name": "max_pages",
+        "in": "query",
+        "required": False,
+        "description": "Maximum number of pages to fetch from the ratings feed.",
+        "schema": {"type": "integer", "minimum": 1},
+    },
+]
+
 
 def build_schema(server_url: str) -> dict[str, Any]:
     server_url = server_url.rstrip("/")
@@ -177,6 +222,30 @@ def build_schema(server_url: str) -> dict[str, Any]:
                         "Available functions.",
                         "#/components/schemas/DodoFunctionsResponse",
                     ),
+                }
+            },
+            "/dodo/ratings/customer-experience": {
+                "get": {
+                    "operationId": "getDodoCustomerExperienceRatings",
+                    "summary": "Get customer experience ratings",
+                    "description": (
+                        "Read Dodo IS customer experience ratings by unit or by country. "
+                        "Provide either units or countryCode."
+                    ),
+                    "parameters": RATINGS_PARAMETERS,
+                    "responses": data_response("Customer experience rating rows."),
+                }
+            },
+            "/dodo/ratings/standards": {
+                "get": {
+                    "operationId": "getDodoStandardsRatings",
+                    "summary": "Get standards ratings",
+                    "description": (
+                        "Read Dodo IS standards ratings by unit or by country. "
+                        "Provide either units or countryCode."
+                    ),
+                    "parameters": RATINGS_PARAMETERS,
+                    "responses": data_response("Standards rating rows."),
                 }
             },
             "/dodo/delivery/courier-orders": {
@@ -489,6 +558,12 @@ def dodo_data_response_schema() -> dict[str, Any]:
             "tool_name": {"type": "string", "description": "Internal Bridge tool id."},
             "dry_run": {"type": "boolean", "description": "True when Dodo IS was not called."},
             "request": {"$ref": "#/components/schemas/DodoRequest"},
+            "meta": {
+                "type": "object",
+                "description": "Optional top-level metadata kept from the source response.",
+                "properties": {},
+                "additionalProperties": True,
+            },
             "pagination": {"$ref": "#/components/schemas/DodoPagination"},
             "rows_key": {"type": "string", "description": "Name of the Dodo response field used as rows."},
             "row_count": {"type": "integer", "description": "Number of returned rows."},

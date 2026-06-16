@@ -16,6 +16,7 @@ All routes require the bridge API key when `DODO_BRIDGE_API_KEYS` is configured.
 - `fields`: optional comma-separated list of row fields to keep.
 - `take`: page size for paginated Dodo endpoints.
 - `max_pages`: maximum number of pages to fetch.
+- `countryCode`: optional Dodo country code for country-level rating endpoints.
 
 Period length is capped by `DODO_DATA_MAX_PERIOD_DAYS`.
 
@@ -95,6 +96,48 @@ Uses:
 ```text
 GET /dodopizza/{country}/accounting/write-offs/products
 ```
+
+### Customer Experience Rating
+
+```http
+GET /dodo/ratings/customer-experience?units=<unit-id>
+```
+
+Or country-wide:
+
+```http
+GET /dodo/ratings/customer-experience?countryCode=643&take=100
+```
+
+Uses:
+
+```text
+GET /controlling/ratings/customer-experience
+```
+
+Returns `unitRates` plus top-level metadata such as `periodFrom`, `periodTo`,
+`publishStatus`, and `publishedAt`.
+
+### Standards Rating
+
+```http
+GET /dodo/ratings/standards?units=<unit-id>
+```
+
+Or country-wide:
+
+```http
+GET /dodo/ratings/standards?countryCode=643&take=100
+```
+
+Uses:
+
+```text
+GET /controlling/ratings/standards
+```
+
+Returns `unitRates` plus top-level metadata such as `periodFrom`, `periodTo`,
+`publishStatus`, and `publishedAt`.
 
 ## Example Dry Run
 

@@ -21,6 +21,7 @@ class DodoDataFunction:
     description: str
     row_keys: tuple[str, ...]
     paginated: bool = True
+    meta_keys: tuple[str, ...] = ()
 
 
 FUNCTIONS: dict[str, DodoDataFunction] = {
@@ -54,6 +55,20 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         tool_name="dodo_accounting_writeoffs_products",
         description="Product write-off rows.",
         row_keys=("writeOffs", "writeoffs", "products", "items"),
+    ),
+    "ratings_customer_experience": DodoDataFunction(
+        name="ratings_customer_experience",
+        tool_name="dodo_controlling_ratings_customer_experience",
+        description="Customer experience ratings by unit or country.",
+        row_keys=("unitRates", "ratings", "items"),
+        meta_keys=("periodFrom", "periodTo", "publishStatus", "publishedAt"),
+    ),
+    "ratings_standards": DodoDataFunction(
+        name="ratings_standards",
+        tool_name="dodo_controlling_ratings_standards",
+        description="Standards ratings by unit or country.",
+        row_keys=("unitRates", "ratings", "items"),
+        meta_keys=("periodFrom", "periodTo", "publishStatus", "publishedAt"),
     ),
 }
 
@@ -144,9 +159,11 @@ class DodoDataService:
                     "response": payload,
                 }
             projected = project_rows(rows, fields)
+            meta = extract_meta(payload, function.meta_keys)
             return {
                 "function": function.name,
                 "tool_name": tool.name,
+                "meta": meta or None,
                 "rows_key": rows_key,
                 "row_count": len(projected),
                 "rows": projected,
@@ -156,6 +173,7 @@ class DodoDataService:
         rows_key: str | None = None
         pages_fetched = 0
         truncated = False
+        meta: dict[str, Any] = {}
         for page in range(max_pages_value):
             page_params = dict(base_params)
             page_params["skip"] = page * take_value
@@ -175,6 +193,7 @@ class DodoDataService:
                 return {
                     "function": function.name,
                     "tool_name": tool.name,
+                    "meta": extract_meta(payload, function.meta_keys) or None,
                     "row_count": None,
                     "rows_key": None,
                     "pages_fetched": pages_fetched,
@@ -182,6 +201,8 @@ class DodoDataService:
                 }
 
             rows_key = rows_key or current_key
+            if not meta:
+                meta = extract_meta(payload, function.meta_keys)
             pages_fetched += 1
             all_rows.extend(rows)
             if len(all_rows) >= self.settings.dodo_data_max_rows:
@@ -198,6 +219,7 @@ class DodoDataService:
         return {
             "function": function.name,
             "tool_name": tool.name,
+            "meta": meta or None,
             "rows_key": rows_key,
             "row_count": len(projected),
             "pages_fetched": pages_fetched,
@@ -300,6 +322,11 @@ def project_rows(rows: list[Any], fields: list[str] | None) -> list[Any]:
     return projected
 
 
+def extract_meta(payload: Any, keys: tuple[str, ...]) -> dict[str, Any]:
+    if not keys or not isinstance(payload, dict):
+        return {}
+    return {key: payload.get(key) for key in keys if key in payload}
+
+
 def _is_connector_dry_run(payload: Any) -> bool:
     return isinstance(payload, dict) and payload.get("dry_run") is True
-

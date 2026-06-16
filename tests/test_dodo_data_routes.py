@@ -21,6 +21,7 @@ def test_dodo_functions_list(tmp_path) -> None:
     names = {item["name"] for item in response.json()["functions"]}
     assert "accounting_sales" in names
     assert "courier_orders" in names
+    assert "ratings_customer_experience" in names
 
 
 def test_dodo_accounting_sales_dry_run(tmp_path) -> None:
@@ -109,6 +110,88 @@ def test_dodo_data_rejects_too_large_period(tmp_path) -> None:
 
     assert response.status_code == 422
     assert "Period is too large" in response.json()["detail"]
+
+
+def test_dodo_ratings_customer_experience_dry_run(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/ratings/customer-experience",
+            params={
+                "countryCode": "643",
+                "dry_run": "true",
+                "take": "1",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "ratings_customer_experience"
+    assert payload["dry_run"] is True
+    assert "/controlling/ratings/customer-experience" in payload["request"]["url"]
+    assert "countryCode=643" in payload["request"]["url"]
+    assert "take=1" in payload["request"]["url"]
+
+
+def test_dodo_ratings_standards_paginates_and_keeps_meta(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        base = {
+            "periodFrom": "2026-06-08",
+            "periodTo": "2026-06-14",
+            "publishStatus": "Published",
+            "publishedAt": "2026-06-15T16:19:01",
+        }
+        if parameters["skip"] == 0:
+            return {
+                **base,
+                "unitRates": [
+                    {"unitId": "u1", "unitName": "One", "rate": 90},
+                    {"unitId": "u2", "unitName": "Two", "rate": 80},
+                ],
+            }
+        return {
+            **base,
+            "unitRates": [{"unitId": "u3", "unitName": "Three", "rate": 70}],
+        }
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/ratings/standards",
+            params={
+                "countryCode": "643",
+                "take": "2",
+                "max_pages": "2",
+                "fields": "unitId,rate",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "ratings_standards"
+    assert payload["row_count"] == 3
+    assert payload["pages_fetched"] == 2
+    assert payload["meta"] == {
+        "periodFrom": "2026-06-08",
+        "periodTo": "2026-06-14",
+        "publishStatus": "Published",
+        "publishedAt": "2026-06-15T16:19:01",
+    }
+    assert payload["rows"] == [
+        {"unitId": "u1", "rate": 90},
+        {"unitId": "u2", "rate": 80},
+        {"unitId": "u3", "rate": 70},
+    ]
 
 
 def make_settings(

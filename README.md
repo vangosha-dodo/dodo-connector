@@ -55,6 +55,8 @@ OpenAPI is exposed at `http://127.0.0.1:8000/docs`.
 - `GET /dodo/delivery/statistics` - delivery statistics.
 - `GET /dodo/accounting/sales` - accounting sales rows.
 - `GET /dodo/accounting/writeoffs/products` - product write-off rows.
+- `GET /dodo/ratings/customer-experience` - customer experience ratings by unit or country.
+- `GET /dodo/ratings/standards` - standards ratings by unit or country.
 - `POST /feedback` - attach human feedback to an audit event.
 - `GET /learning/recommendations` - policy/tooling recommendations from audit data.
 - `GET /auth/dodo` - internal web form for Dodo IS session refresh and email MFA code entry.
@@ -68,6 +70,7 @@ Active tools:
 
 - Dodo courier orders, staff shifts, and delivery statistics;
 - Dodo accounting sales and product write-offs;
+- Dodo customer-experience and standards ratings;
 - constrained Superset employee-discount chart data exposed as an approved
   business capability.
 

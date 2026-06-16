@@ -6,6 +6,8 @@ allowed_tools:
   - dodo_delivery_statistics
   - dodo_accounting_sales
   - dodo_accounting_writeoffs_products
+  - dodo_controlling_ratings_customer_experience
+  - dodo_controlling_ratings_standards
   - superset_employee_discount_chart
 blocked_tools: []
 require_approval_for_risk:
