@@ -90,6 +90,24 @@ async function loadSessionCookies(sessionFiles) {
   return cookies;
 }
 
+async function clickLoginIfNeeded(cdp) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const evaluated = await cdp.send('Runtime.evaluate', {
+      expression: `(() => {
+        const button = [...document.querySelectorAll('button,a')]
+          .find((item) => /Sign in|Войти|Log in/i.test(item.innerText || ''));
+        if (button) button.click();
+        return { clicked: Boolean(button), href: location.href, title: document.title };
+      })()`,
+      returnByValue: true,
+    });
+    const value = evaluated.result.value || {};
+    if (!String(value.href || '').includes('/login/')) return value;
+    await sleep(value.clicked ? 10000 : 3000);
+  }
+  return {};
+}
+
 async function main() {
   const request = await stdinJson();
   const chrome = process.env.SUPERSET_CHROME_PATH
@@ -145,6 +163,8 @@ async function main() {
 
       await cdp.send('Page.navigate', { url: dashboardUrl });
       await sleep(Number(process.env.SUPERSET_DASHBOARD_WAIT_MS || 5000));
+      await clickLoginIfNeeded(cdp);
+      await sleep(Number(process.env.SUPERSET_POST_LOGIN_WAIT_MS || 5000));
 
       const expression = `
         (async () => {
