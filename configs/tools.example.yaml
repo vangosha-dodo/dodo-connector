@@ -53,6 +53,29 @@ tools:
     source_evidence:
       - OpenClaw skill dodo-courier-report combines staff/shifts with courier orders.
 
+  - name: dodo_staff_vacancies_count
+    description: Read Dodo IS open vacancy counts by unit.
+    connector: dodo
+    method: GET
+    path: /dodopizza/{country}/staff/vacancies/count
+    risk_level: read
+    enabled: true
+    status: active
+    allowed_query_params:
+      - units
+      - countryCode
+      - skip
+      - take
+    max_response_chars: 30000
+    tags:
+      - api-priority
+      - staff
+      - vacancies
+      - management
+    source_evidence:
+      - Live Dodo API check on 2026-06-16 returned vacancies, vacanciesCount, location, and isEndOfListReached.
+      - Endpoint accepts optional units, countryCode, take, and skip.
+
   - name: dodo_delivery_statistics
     description: Read Dodo IS delivery statistics by period and units.
     connector: dodo

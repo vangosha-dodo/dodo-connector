@@ -158,6 +158,32 @@ async def staff_shifts(
     )
 
 
+@router.get("/staff/vacancies/count")
+async def staff_vacancies_count(
+    units: str | None = Query(default=None, description="Optional comma-separated Dodo unit ids."),
+    country_code: int | None = Query(
+        default=None,
+        alias="countryCode",
+        description="Optional Dodo country code for country-level vacancy counts.",
+    ),
+    fields: str | None = Query(default=None, description="Optional comma-separated row fields."),
+    take: int | None = Query(default=None, ge=1),
+    max_pages: int | None = Query(default=None, ge=1),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _optional_unit_country_params(units=units, country_code=country_code)
+    return await _fetch(
+        context,
+        function_name="staff_vacancies_count",
+        parameters=params,
+        dry_run=dry_run,
+        fields=fields,
+        take=take,
+        max_pages=max_pages,
+    )
+
+
 @router.get("/delivery/statistics")
 async def delivery_statistics(
     units: str = Query(..., description="Comma-separated Dodo unit ids."),
@@ -322,6 +348,15 @@ def _ratings_params(*, units: str | None, country_code: int | None) -> dict[str,
         params["countryCode"] = country_code
     if not params:
         raise HTTPException(status_code=422, detail="Provide either 'units' or 'countryCode'")
+    return params
+
+
+def _optional_unit_country_params(*, units: str | None, country_code: int | None) -> dict[str, Any]:
+    params: dict[str, Any] = {}
+    if units:
+        params["units"] = normalize_units(units)
+    if country_code is not None:
+        params["countryCode"] = country_code
     return params
 
 

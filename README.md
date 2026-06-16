@@ -52,6 +52,7 @@ OpenAPI is exposed at `http://127.0.0.1:8000/docs`.
 - `GET /dodo/functions` - Dodo IS data functions exposed by the bridge.
 - `GET /dodo/delivery/courier-orders` - courier delivery order rows.
 - `GET /dodo/staff/shifts` - staff/courier shifts.
+- `GET /dodo/staff/vacancies/count` - open vacancy counts by unit.
 - `GET /dodo/delivery/statistics` - delivery statistics.
 - `GET /dodo/accounting/sales` - accounting sales rows.
 - `GET /dodo/accounting/writeoffs/products` - product write-off rows.
@@ -70,6 +71,7 @@ See `docs/OPENCLAW_TASKS.md`.
 Active tools:
 
 - Dodo courier orders, staff shifts, and delivery statistics;
+- Dodo open vacancy counts;
 - Dodo accounting sales and product write-offs;
 - Dodo inventory stock balances;
 - Dodo customer-experience and standards ratings;

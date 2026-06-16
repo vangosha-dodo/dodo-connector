@@ -61,6 +61,27 @@ Uses:
 GET /dodopizza/{country}/staff/shifts
 ```
 
+### Staff Vacancy Counts
+
+```http
+GET /dodo/staff/vacancies/count?units=<unit-id>
+```
+
+Or country-wide:
+
+```http
+GET /dodo/staff/vacancies/count?countryCode=643&take=100
+```
+
+Uses:
+
+```text
+GET /dodopizza/{country}/staff/vacancies/count
+```
+
+Returns vacancy rows with `id`, `name`, `address`, `vacanciesCount`,
+`location`, `countryId`, and `businessId`.
+
 ### Delivery Statistics
 
 ```http

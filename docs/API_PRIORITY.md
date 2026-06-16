@@ -22,7 +22,7 @@ Reviewed on 2026-06-16 against the current Bridge code and live Dodo API access.
 4. `staff_vacancies_count`
    - Source: `GET /dodopizza/{country}/staff/vacancies/count`
    - Why: staffing gaps for recruiting and expansion decisions.
-   - Status: verified live, not yet exposed.
+   - Status: implemented in Bridge.
 
 5. `stock_consumptions_by_period`
    - Source: `GET /dodopizza/{country}/accounting/stock-consumptions-by-period`

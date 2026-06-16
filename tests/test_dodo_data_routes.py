@@ -23,6 +23,7 @@ def test_dodo_functions_list(tmp_path) -> None:
     assert "accounting_inventory_stocks" in names
     assert "courier_orders" in names
     assert "ratings_customer_experience" in names
+    assert "staff_vacancies_count" in names
 
 
 def test_dodo_accounting_sales_dry_run(tmp_path) -> None:
@@ -162,6 +163,71 @@ def test_dodo_accounting_inventory_stocks_paginates_and_projects(tmp_path, monke
         {"id": "i1", "quantity": 10, "daysUntilBalanceRunsOut": 3},
         {"id": "i2", "quantity": 20, "daysUntilBalanceRunsOut": 5},
         {"id": "i3", "quantity": 30, "daysUntilBalanceRunsOut": 7},
+    ]
+
+
+def test_dodo_staff_vacancies_count_dry_run(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/staff/vacancies/count",
+            params={
+                "countryCode": "643",
+                "dry_run": "true",
+                "take": "2",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "staff_vacancies_count"
+    assert payload["dry_run"] is True
+    assert "/staff/vacancies/count" in payload["request"]["url"]
+    assert "countryCode=643" in payload["request"]["url"]
+    assert "take=2" in payload["request"]["url"]
+
+
+def test_dodo_staff_vacancies_count_paginates_and_projects(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        if parameters["skip"] == 0:
+            return {
+                "vacancies": [
+                    {"id": "u1", "name": "One", "vacanciesCount": 4, "address": "A"},
+                    {"id": "u2", "name": "Two", "vacanciesCount": 2, "address": "B"},
+                ]
+            }
+        return {"vacancies": [{"id": "u3", "name": "Three", "vacanciesCount": 1, "address": "C"}]}
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/staff/vacancies/count",
+            params={
+                "countryCode": "643",
+                "take": "2",
+                "max_pages": "2",
+                "fields": "id,vacanciesCount",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["row_count"] == 3
+    assert payload["pages_fetched"] == 2
+    assert payload["rows"] == [
+        {"id": "u1", "vacanciesCount": 4},
+        {"id": "u2", "vacanciesCount": 2},
+        {"id": "u3", "vacanciesCount": 1},
     ]
 
 

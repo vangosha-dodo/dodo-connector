@@ -113,6 +113,37 @@ RATINGS_PARAMETERS: list[dict[str, Any]] = [
     },
 ]
 
+OPTIONAL_UNIT_COUNTRY_PARAMETERS: list[dict[str, Any]] = [
+    {
+        "name": "units",
+        "in": "query",
+        "required": False,
+        "description": "Optional comma-separated Dodo unit ids.",
+        "schema": {"type": "string"},
+    },
+    {
+        "name": "countryCode",
+        "in": "query",
+        "required": False,
+        "description": "Optional Dodo country code.",
+        "schema": {"type": "integer"},
+    },
+    {
+        "name": "fields",
+        "in": "query",
+        "required": False,
+        "description": "Optional comma-separated response fields to keep.",
+        "schema": {"type": "string"},
+    },
+    {
+        "name": "dry_run",
+        "in": "query",
+        "required": False,
+        "description": "When true, return the planned Dodo API GET request without calling Dodo IS.",
+        "schema": {"type": "boolean", "default": False},
+    },
+]
+
 
 def build_schema(server_url: str) -> dict[str, Any]:
     server_url = server_url.rstrip("/")
@@ -274,6 +305,15 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ]
                     + PAGINATION_PARAMETERS,
                     "responses": data_response("Staff shift rows."),
+                }
+            },
+            "/dodo/staff/vacancies/count": {
+                "get": {
+                    "operationId": "getDodoStaffVacancyCounts",
+                    "summary": "Get staff vacancy counts",
+                    "description": "Read Dodo IS open vacancy counts by unit.",
+                    "parameters": OPTIONAL_UNIT_COUNTRY_PARAMETERS + PAGINATION_PARAMETERS,
+                    "responses": data_response("Staff vacancy count rows."),
                 }
             },
             "/dodo/delivery/statistics": {

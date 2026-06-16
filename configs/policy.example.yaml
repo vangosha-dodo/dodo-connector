@@ -3,6 +3,7 @@ default_decision: deny
 allowed_tools:
   - dodo_delivery_courier_orders
   - dodo_staff_shifts
+  - dodo_staff_vacancies_count
   - dodo_delivery_statistics
   - dodo_accounting_sales
   - dodo_accounting_writeoffs_products

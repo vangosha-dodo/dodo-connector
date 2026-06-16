@@ -37,6 +37,12 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         description="Staff shifts, normally courier shifts.",
         row_keys=("shifts", "staffShifts", "items"),
     ),
+    "staff_vacancies_count": DodoDataFunction(
+        name="staff_vacancies_count",
+        tool_name="dodo_staff_vacancies_count",
+        description="Open vacancy counts by unit.",
+        row_keys=("vacancies", "items"),
+    ),
     "delivery_statistics": DodoDataFunction(
         name="delivery_statistics",
         tool_name="dodo_delivery_statistics",
