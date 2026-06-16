@@ -11,6 +11,7 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
     assert set(schema["paths"]) == {
         "/analytics/employee-discount",
         "/analytics/kiosk-sales-share",
+        "/analytics/clients-phone-share",
         "/system/missing-capability",
         "/dodo/pizzerias",
         "/dodo/functions",
@@ -31,6 +32,7 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
             assert set(path_item) == {"get"}
     assert set(schema["paths"]["/analytics/employee-discount"]) == {"post"}
     assert set(schema["paths"]["/analytics/kiosk-sales-share"]) == {"post"}
+    assert set(schema["paths"]["/analytics/clients-phone-share"]) == {"post"}
     assert set(schema["paths"]["/system/missing-capability"]) == {"post"}
 
 
@@ -95,6 +97,20 @@ def test_chatgpt_openapi_includes_kiosk_sales_share() -> None:
         "$ref": "#/components/schemas/KioskSalesShareResponse"
     }
     assert "KioskSalesShareRow" in schema["components"]["schemas"]
+
+
+def test_chatgpt_openapi_includes_clients_phone_share() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    operation = schema["paths"]["/analytics/clients-phone-share"]["post"]
+    assert operation["operationId"] == "getClientsPhoneShare"
+    assert operation["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ClientsPhoneShareRequest"
+    }
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ClientsPhoneShareResponse"
+    }
+    assert "ClientsPhoneShareRow" in schema["components"]["schemas"]
 
 
 def test_chatgpt_openapi_includes_missing_capability_report() -> None:

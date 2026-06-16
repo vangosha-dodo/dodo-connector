@@ -16,7 +16,7 @@ class SupersetConnector:
         self.settings = settings
 
     async def invoke(self, tool: ToolSpec, parameters: dict[str, Any], dry_run: bool) -> Any:
-        base_url = (self.settings.superset_base_url or "").rstrip("/")
+        base_url = (tool.base_url or self.settings.superset_base_url or "").rstrip("/")
         path = tool.path
         for key, value in parameters.items():
             placeholder = "{" + key + "}"
@@ -39,19 +39,25 @@ class SupersetConnector:
             }
 
         if self.settings.superset_session_cookies_path:
-            return await self._invoke_with_session_cookies(tool.method, url, payload)
+            return await self._invoke_with_session_cookies(tool.method, url, payload, base_url)
 
         if self.settings.superset_browser_helper_command:
-            return await self._invoke_with_browser_helper(tool.method, url, payload)
+            return await self._invoke_with_browser_helper(
+                tool.method,
+                url,
+                payload,
+                base_url=base_url,
+                dashboard_url=tool.dashboard_url,
+            )
 
-        token = await self._access_token()
+        token = await self._access_token(base_url)
         headers = {"Authorization": f"Bearer {token}"} if token else {}
         async with httpx.AsyncClient(timeout=45) as client:
             response = await client.request(tool.method, url, headers=headers, json=payload)
             response.raise_for_status()
             return response.json()
 
-    async def _invoke_with_session_cookies(self, method: str, url: str, payload: Any) -> Any:
+    async def _invoke_with_session_cookies(self, method: str, url: str, payload: Any, base_url: str) -> Any:
         cookies = self._load_cookies()
         headers = {
             "Accept": "application/json",
@@ -59,7 +65,7 @@ class SupersetConnector:
             "X-Requested-With": "XMLHttpRequest",
         }
         async with httpx.AsyncClient(timeout=60, cookies=cookies) as client:
-            csrf_url = f"{self.settings.superset_base_url.rstrip('/')}/api/v1/security/csrf_token/"
+            csrf_url = f"{base_url}/api/v1/security/csrf_token/"
             csrf_response = await client.get(csrf_url, headers={"Accept": "application/json"})
             csrf_response.raise_for_status()
             csrf = csrf_response.json().get("result")
@@ -86,7 +92,15 @@ class SupersetConnector:
             return cookies
         return {}
 
-    async def _invoke_with_browser_helper(self, method: str, url: str, payload: Any) -> Any:
+    async def _invoke_with_browser_helper(
+        self,
+        method: str,
+        url: str,
+        payload: Any,
+        *,
+        base_url: str,
+        dashboard_url: str | None,
+    ) -> Any:
         command = self.settings.superset_browser_helper_command
         if not command:
             raise RuntimeError("Superset browser helper is not configured")
@@ -100,7 +114,8 @@ class SupersetConnector:
             {
                 "method": method,
                 "url": url,
-                "base_url": self.settings.superset_base_url,
+                "base_url": base_url,
+                "dashboard_url": dashboard_url,
                 "json": payload,
             },
             ensure_ascii=False,
@@ -123,7 +138,7 @@ class SupersetConnector:
             preview = stdout.decode("utf-8", errors="replace")[:1000]
             raise RuntimeError(f"Superset browser helper returned invalid JSON: {preview}") from exc
 
-    async def _access_token(self) -> str | None:
+    async def _access_token(self, base_url: str) -> str | None:
         if self.settings.superset_access_token:
             return self.settings.superset_access_token
         if not (
@@ -133,7 +148,7 @@ class SupersetConnector:
         ):
             return None
 
-        login_url = f"{self.settings.superset_base_url.rstrip('/')}/api/v1/security/login"
+        login_url = f"{base_url}/api/v1/security/login"
         payload = {
             "username": self.settings.superset_username,
             "password": self.settings.superset_password,

@@ -341,16 +341,22 @@ tools:
     description: Read approved Superset chart data for dine-in identified orders via cashier.
     connector: superset
     method: POST
-    path: /api/v1/chart/data
+    path: /superset/api/v1/chart/data
+    base_url: https://officemanager.dodois.io
+    dashboard_url: https://officemanager.dodois.io/OfficeManager/Analytics/Client_analytics
     risk_level: read
-    enabled: false
-    status: candidate
+    enabled: true
+    status: active
     required_params:
       - dashboard_id
       - chart_id
       - metric
     allowed_query_params:
       - dashboard_id
+    allowed_dashboard_ids:
+      - 868
+    allowed_chart_ids:
+      - 18721
     allowed_metrics:
       - Share of dine in identified orders via cashier
     max_response_chars: 30000
@@ -362,6 +368,7 @@ tools:
     source_evidence:
       - OpenClaw cron job "Клиенты с телефоном" uses Superset Client_analytics.
       - "Source metric from cron payload: Share of dine in identified orders via cashier."
+      - OpenClaw automation captured dashboard 868, datasource 1615, and chart 18721.
 
   - name: dodo_auth_session_status
     description: Check OfficeManager/admin Dodo IS saved session health without printing secrets.

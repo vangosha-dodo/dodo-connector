@@ -39,14 +39,10 @@ def test_disabled_tool_is_blocked_and_audited(tmp_path) -> None:
     try:
         client = TestClient(app)
         response = client.post(
-            "/tools/superset_clients_phone_share/invoke",
+            "/tools/dodo_auth_session_status/invoke",
             json={
-                "parameters": {
-                    "dashboard_id": 123,
-                    "chart_id": 456,
-                    "metric": "Share of dine in identified orders via cashier",
-                },
-                "intent": "check clients phone share",
+                "parameters": {},
+                "intent": "check auth session",
             },
         )
     finally:

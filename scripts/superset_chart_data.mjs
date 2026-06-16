@@ -114,6 +114,7 @@ async function main() {
     || process.env.DODO_AUTH_CHROME_PATH
     || '/usr/bin/google-chrome';
   const dashboardUrl = process.env.SUPERSET_DASHBOARD_URL
+    || request.dashboard_url
     || `${request.base_url || 'https://analytics.dodois.io'}/superset/welcome/`;
   const sessionFiles = (process.env.SUPERSET_SESSION_FILES || '')
     .split(',')

@@ -4,6 +4,7 @@ import json
 
 from dodo_bridge.config import Settings
 from dodo_bridge.connectors.superset import SupersetConnector
+from dodo_bridge.models import ConnectorName, ToolSpec
 
 
 def test_settings_ignore_blank_superset_cookie_path() -> None:
@@ -51,3 +52,33 @@ def test_superset_connector_loads_playwright_cookies(tmp_path) -> None:
     )
 
     assert connector._load_cookies() == {"session": "abc"}
+
+
+def test_superset_connector_dry_run_uses_tool_base_url() -> None:
+    connector = SupersetConnector(
+        Settings(
+            api_keys=[],
+            superset_base_url="https://analytics.dodois.io",
+        )
+    )
+    tool = ToolSpec(
+        name="superset_clients_phone_share",
+        connector=ConnectorName.SUPERSET,
+        method="POST",
+        path="/superset/api/v1/chart/data",
+        base_url="https://officemanager.dodois.io",
+        dashboard_url="https://officemanager.dodois.io/OfficeManager/Analytics/Client_analytics",
+        allowed_query_params=["dashboard_id"],
+    )
+
+    result = awaitable(connector.invoke(tool, {"dashboard_id": 868, "body": {"ok": True}}, dry_run=True))
+
+    assert result["request"]["url"] == (
+        "https://officemanager.dodois.io/superset/api/v1/chart/data?dashboard_id=868"
+    )
+
+
+def awaitable(coro):  # noqa: ANN001
+    import asyncio
+
+    return asyncio.run(coro)

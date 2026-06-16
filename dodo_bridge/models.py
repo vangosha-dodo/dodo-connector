@@ -36,6 +36,8 @@ class ToolSpec(BaseModel):
     status: str = "candidate"
     tags: list[str] = Field(default_factory=list)
     source_evidence: list[str] = Field(default_factory=list)
+    base_url: str | None = None
+    dashboard_url: str | None = None
 
 
 class ToolInvocationRequest(BaseModel):

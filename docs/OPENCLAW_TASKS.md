@@ -92,6 +92,11 @@ marketing Google Sheet.
 Bridge decision: keep as a candidate until dashboard/chart ids are captured.
 Writing to Google Sheets is not part of the first ChatGPT bridge surface.
 
+Bridge update on 2026-06-16: exposed as a constrained read-only Superset
+capability for dashboard `868`, chart `18721`, datasource `1615`, and metric
+`Share of dine in identified orders via cashier`. Google Sheets writing remains
+outside the Bridge.
+
 ### 6. Dodo IS Auth Session Refresh
 
 OpenClaw daily task checks OfficeManager/admin Dodo IS sessions, refreshes
@@ -128,6 +133,6 @@ The first bridge allowlist is now:
 ## Candidate / Restricted Tools
 
 - `superset_kiosk_sales_share`: active read-only capability.
-- `superset_clients_phone_share`: candidate, needs captured dashboard/chart id.
+- `superset_clients_phone_share`: active read-only capability.
 - `dodo_auth_session_status`: restricted, disabled.
 - `dodo_create_write_off`: restricted write operation, disabled.
