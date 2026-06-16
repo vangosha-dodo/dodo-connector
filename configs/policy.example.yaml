@@ -6,6 +6,7 @@ allowed_tools:
   - dodo_delivery_statistics
   - dodo_accounting_sales
   - dodo_accounting_writeoffs_products
+  - dodo_accounting_inventory_stocks
   - dodo_controlling_ratings_customer_experience
   - dodo_controlling_ratings_standards
   - superset_employee_discount_chart

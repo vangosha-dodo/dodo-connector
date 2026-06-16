@@ -56,6 +56,12 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         description="Product write-off rows.",
         row_keys=("writeOffs", "writeoffs", "products", "items"),
     ),
+    "accounting_inventory_stocks": DodoDataFunction(
+        name="accounting_inventory_stocks",
+        tool_name="dodo_accounting_inventory_stocks",
+        description="Inventory stock balance rows.",
+        row_keys=("stocks", "inventoryStocks", "items"),
+    ),
     "ratings_customer_experience": DodoDataFunction(
         name="ratings_customer_experience",
         tool_name="dodo_controlling_ratings_customer_experience",

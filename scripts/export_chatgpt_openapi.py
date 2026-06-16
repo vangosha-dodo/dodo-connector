@@ -303,6 +303,17 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "responses": data_response("Product write-off rows."),
                 }
             },
+            "/dodo/accounting/inventory-stocks": {
+                "get": {
+                    "operationId": "getDodoAccountingInventoryStocks",
+                    "summary": "Get inventory stocks",
+                    "description": (
+                        "Read Dodo IS inventory stock balances for selected units and period."
+                    ),
+                    "parameters": COMMON_PERIOD_PARAMETERS + PAGINATION_PARAMETERS,
+                    "responses": data_response("Inventory stock rows."),
+                }
+            },
         },
         "components": {
             "securitySchemes": {

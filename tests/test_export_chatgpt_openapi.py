@@ -20,6 +20,7 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
         "/dodo/delivery/statistics",
         "/dodo/accounting/sales",
         "/dodo/accounting/writeoffs/products",
+        "/dodo/accounting/inventory-stocks",
     }
     for path, path_item in schema["paths"].items():
         if path.startswith("/dodo/"):
@@ -97,5 +98,15 @@ def test_chatgpt_openapi_includes_ratings_routes() -> None:
     assert customer["operationId"] == "getDodoCustomerExperienceRatings"
     assert standards["operationId"] == "getDodoStandardsRatings"
     assert customer["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/DodoDataResponse"
+    }
+
+
+def test_chatgpt_openapi_includes_inventory_stocks() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    operation = schema["paths"]["/dodo/accounting/inventory-stocks"]["get"]
+    assert operation["operationId"] == "getDodoAccountingInventoryStocks"
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/DodoDataResponse"
     }
