@@ -10,6 +10,7 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
     assert schema["servers"] == [{"url": "https://bridge.example.com"}]
     assert set(schema["paths"]) == {
         "/analytics/employee-discount",
+        "/system/missing-capability",
         "/dodo/pizzerias",
         "/dodo/functions",
         "/dodo/delivery/courier-orders",
@@ -22,6 +23,7 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
         if path.startswith("/dodo/"):
             assert set(path_item) == {"get"}
     assert set(schema["paths"]["/analytics/employee-discount"]) == {"post"}
+    assert set(schema["paths"]["/system/missing-capability"]) == {"post"}
 
 
 def test_chatgpt_openapi_declares_bearer_auth() -> None:
@@ -71,3 +73,15 @@ def test_chatgpt_openapi_includes_employee_discount() -> None:
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/EmployeeDiscountResponse"
     }
+
+
+def test_chatgpt_openapi_includes_missing_capability_report() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    operation = schema["paths"]["/system/missing-capability"]["post"]
+    assert operation["operationId"] == "reportMissingCapability"
+    assert operation["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/MissingCapabilityRequest"
+    }
+    response = schema["components"]["schemas"]["MissingCapabilityResponse"]
+    assert response["properties"]["dodo_is_changed"]["const"] is False

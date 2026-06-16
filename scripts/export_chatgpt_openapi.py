@@ -78,8 +78,9 @@ def build_schema(server_url: str) -> dict[str, Any]:
             "version": "0.1.0",
             "description": (
                 "Read-only ChatGPT Action surface for Dodo IS data. "
-                "Every business operation is a GET request; no write, update, delete, "
-                "admin, auth, feedback, or generic invoke endpoints are exposed."
+                "Business operations do not write to Dodo IS. The system endpoint only records "
+                "internal Bridge backlog entries for missing read-only capabilities; no admin, "
+                "auth, feedback, or generic invoke endpoints are exposed."
             ),
         },
         "servers": [{"url": server_url}],
@@ -104,6 +105,29 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "responses": successful_response(
                         "Employee discount summary.",
                         "#/components/schemas/EmployeeDiscountResponse",
+                    ),
+                }
+            },
+            "/system/missing-capability": {
+                "post": {
+                    "operationId": "reportMissingCapability",
+                    "summary": "Report a missing read-only capability",
+                    "description": (
+                        "Record an internal Bridge backlog entry when the user asks for data "
+                        "that is not covered by the current approved read-only actions. "
+                        "This never changes Dodo IS or Superset data."
+                    ),
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/MissingCapabilityRequest"}
+                            }
+                        },
+                    },
+                    "responses": successful_response(
+                        "Missing capability backlog entry.",
+                        "#/components/schemas/MissingCapabilityResponse",
                     ),
                 }
             },
@@ -231,6 +255,9 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "EmployeeDiscountSummary": employee_discount_summary_schema(),
                 "EmployeeDiscountRow": employee_discount_row_schema(),
                 "EmployeeDiscountSupersetMeta": employee_discount_superset_meta_schema(),
+                "MissingCapabilityRequest": missing_capability_request_schema(),
+                "MissingCapabilityPeriod": missing_capability_period_schema(),
+                "MissingCapabilityResponse": missing_capability_response_schema(),
                 "DodoDataResponse": dodo_data_response_schema(),
                 "DodoRequest": dodo_request_schema(),
                 "DodoPagination": dodo_pagination_schema(),
@@ -339,6 +366,116 @@ def dodo_pizzeria_schema() -> dict[str, Any]:
             "unit_type",
             "is_pizzeria",
         ],
+        "additionalProperties": False,
+    }
+
+
+def missing_capability_request_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": (
+            "Backlog entry for a missing read-only capability. Use only when the current "
+            "actions cannot answer the user's data request."
+        ),
+        "properties": {
+            "user_question": {
+                "type": "string",
+                "description": "Original user request or concise paraphrase.",
+                "minLength": 3,
+                "maxLength": 2000,
+            },
+            "requested_capability": {
+                "type": "string",
+                "description": "Stable snake_case name for the desired capability.",
+                "minLength": 3,
+                "maxLength": 200,
+            },
+            "desired_output": {
+                "type": "string",
+                "description": "Expected output shape, metric, dimensions, or aggregation.",
+                "maxLength": 1000,
+            },
+            "source_type": {
+                "type": "string",
+                "description": "Best known source for the data.",
+                "enum": [
+                    "dodo_api",
+                    "superset",
+                    "web_interface",
+                    "google_sheet",
+                    "unknown",
+                    "other",
+                ],
+                "default": "unknown",
+            },
+            "known_source": {
+                "type": "string",
+                "description": "Known dashboard, report, sheet, URL, or Dodo IS section.",
+                "maxLength": 500,
+            },
+            "unit_names": {
+                "type": "array",
+                "description": "Human pizzeria names mentioned by the user.",
+                "items": {"type": "string"},
+                "maxItems": 20,
+            },
+            "period": {"$ref": "#/components/schemas/MissingCapabilityPeriod"},
+            "priority": {
+                "type": "string",
+                "enum": ["low", "normal", "high"],
+                "default": "normal",
+            },
+            "confidence": {
+                "type": "number",
+                "description": "Agent confidence that this capability is genuinely missing.",
+                "minimum": 0,
+                "maximum": 1,
+                "default": 0.5,
+            },
+            "notes": {
+                "type": "string",
+                "description": "Additional context for maintainers.",
+                "maxLength": 2000,
+            },
+        },
+        "required": ["user_question", "requested_capability"],
+        "additionalProperties": False,
+    }
+
+
+def missing_capability_period_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Optional period mentioned in the unsupported user request.",
+        "properties": {
+            "from": {"type": "string", "format": "date"},
+            "to": {"type": "string", "format": "date"},
+        },
+        "additionalProperties": False,
+    }
+
+
+def missing_capability_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Accepted internal Bridge backlog entry. Dodo IS is never modified.",
+        "properties": {
+            "status": {"type": "string", "enum": ["accepted"]},
+            "request_id": {"type": "integer"},
+            "audit_id": {"type": "integer"},
+            "dodo_is_changed": {
+                "type": "boolean",
+                "description": "Always false; this action only writes to the Bridge backlog.",
+                "const": False,
+            },
+            "writes": {
+                "type": "array",
+                "description": "Internal Bridge stores affected by the action.",
+                "items": {"type": "string"},
+            },
+            "next_step": {"type": "string"},
+        },
+        "required": ["status", "request_id", "audit_id", "dodo_is_changed", "writes"],
         "additionalProperties": False,
     }
 

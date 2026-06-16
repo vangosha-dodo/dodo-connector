@@ -24,11 +24,13 @@ from dodo_bridge.models import (
 from dodo_bridge.policy import PolicyEngine
 from dodo_bridge.registry import ToolRegistry
 from dodo_bridge.security import authenticate_actor
+from dodo_bridge.system_routes import router as system_router
 
 app = FastAPI(title="Dodo ChatGPT Bridge", version="0.1.0")
 app.include_router(analytics_router)
 app.include_router(dodo_auth_router)
 app.include_router(dodo_data_router)
+app.include_router(system_router)
 
 
 def settings_dep() -> Settings:

@@ -46,6 +46,8 @@ OpenAPI is exposed at `http://127.0.0.1:8000/docs`.
 - `GET /tools` - declared tools and policy state.
 - `POST /tools/{tool_name}/invoke` - invoke a tool or dry-run it.
 - `POST /analytics/employee-discount` - employee discount from the approved Superset recipe.
+- `POST /system/missing-capability` - record an internal backlog entry when the
+  agent cannot answer with current approved read-only actions.
 - `GET /dodo/pizzerias` - pizzeria catalog with names, aliases, and Dodo unit ids.
 - `GET /dodo/functions` - Dodo IS data functions exposed by the bridge.
 - `GET /dodo/delivery/courier-orders` - courier delivery order rows.
@@ -87,3 +89,6 @@ The code is passed to the helper through stdin, not command-line arguments.
 The bridge learns from usage, denials, errors, and human feedback, but it only
 creates recommendations. Enabling a new Dodo/Superset function or relaxing a
 restriction must be a deliberate code/config change committed to git.
+
+`/system/missing-capability` is part of that loop: it writes only to the Bridge
+backlog, never to Dodo IS or Superset.

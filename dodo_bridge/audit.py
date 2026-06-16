@@ -70,6 +70,30 @@ class AuditStore:
                 )
                 """
             )
+            db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS missing_capabilities (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    created_at TEXT NOT NULL,
+                    actor TEXT,
+                    audit_id INTEGER,
+                    user_question TEXT NOT NULL,
+                    requested_capability TEXT NOT NULL,
+                    desired_output TEXT,
+                    source_type TEXT NOT NULL,
+                    known_source TEXT,
+                    unit_names_json TEXT NOT NULL,
+                    period_from TEXT,
+                    period_to TEXT,
+                    priority TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    notes TEXT,
+                    status TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL,
+                    FOREIGN KEY(audit_id) REFERENCES events(id)
+                )
+                """
+            )
 
     def record_event(
         self,
@@ -132,6 +156,68 @@ class AuditStore:
             )
             return int(cursor.lastrowid)
 
+    def add_missing_capability(
+        self,
+        *,
+        actor: str | None,
+        audit_id: int | None,
+        user_question: str,
+        requested_capability: str,
+        desired_output: str | None,
+        source_type: str,
+        known_source: str | None,
+        unit_names: list[str],
+        period_from: str | None,
+        period_to: str | None,
+        priority: str,
+        confidence: float,
+        notes: str | None,
+        metadata: dict[str, Any],
+    ) -> int:
+        self.initialize()
+        with sqlite3.connect(self.path) as db:
+            cursor = db.execute(
+                """
+                INSERT INTO missing_capabilities (
+                    created_at, actor, audit_id, user_question, requested_capability,
+                    desired_output, source_type, known_source, unit_names_json,
+                    period_from, period_to, priority, confidence, notes, status,
+                    metadata_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    utc_now_iso(),
+                    actor,
+                    audit_id,
+                    user_question,
+                    requested_capability,
+                    desired_output,
+                    source_type,
+                    known_source,
+                    json_dumps(unit_names),
+                    period_from,
+                    period_to,
+                    priority,
+                    confidence,
+                    notes,
+                    "new",
+                    json_dumps(metadata),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def fetch_missing_capabilities(self, limit: int = 50) -> list[sqlite3.Row]:
+        return self._fetch_all(
+            """
+            SELECT *
+            FROM missing_capabilities
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+
     def fetch_denied_counts(self) -> list[sqlite3.Row]:
         return self._fetch_all(
             """
@@ -172,4 +258,3 @@ class AuditStore:
         with sqlite3.connect(self.path) as db:
             db.row_factory = sqlite3.Row
             return list(db.execute(query, params))
-
