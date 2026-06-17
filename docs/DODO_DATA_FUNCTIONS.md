@@ -31,6 +31,10 @@ GET /dodo/pizzerias?search=Архангельск
 Returns pizzeria names, aliases, and Dodo unit ids. Use this endpoint before
 data requests when the user gives a pizzeria name instead of a `units` id.
 
+The default production catalog lives at `configs/pizzerias.generated.json` and
+currently includes 16 pizzerias: Архангельск-1/2/3, Белогорск-1,
+Благовещенск-1/2/3, Северодвинск-1/2, Тамбов-1/2/3, and Чита-1/2/3/4.
+
 ### List Functions
 
 ```http

@@ -43,6 +43,32 @@ def test_load_pizzerias_can_include_non_pizzerias(tmp_path) -> None:
     assert any(item["name"] == "Офис" for item in payload["pizzerias"])
 
 
+def test_generated_pizzeria_catalog_contains_openclaw_units() -> None:
+    payload = load_pizzerias(Path("configs/pizzerias.generated.json"))
+
+    assert payload["count"] == 16
+    names = {item["name"] for item in payload["pizzerias"]}
+    assert {
+        "Архангельск-1",
+        "Архангельск-2",
+        "Архангельск-3",
+        "Белогорск-1",
+        "Благовещенск-1",
+        "Благовещенск-2",
+        "Благовещенск-3",
+        "Северодвинск-1",
+        "Северодвинск-2",
+        "Тамбов-1",
+        "Тамбов-2",
+        "Тамбов-3",
+        "Чита-1",
+        "Чита-2",
+        "Чита-3",
+        "Чита-4",
+    } == names
+    assert all(item["unit_id"] for item in payload["pizzerias"])
+
+
 def test_dodo_pizzerias_route_requires_bridge_key_when_configured(tmp_path) -> None:
     settings = make_settings(tmp_path, api_keys=["secret"])
     app.dependency_overrides[dodo_data_settings_dep] = lambda: settings

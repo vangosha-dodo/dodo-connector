@@ -1,0 +1,114 @@
+[
+  {
+    "id": "000d3a39d824a82e11ea643023c05a47",
+    "name": "Белогорск-1",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "000d3a2480c380da11e6a5c46d12dc2f",
+    "name": "Тамбов-1",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "000d3a38b306a94411e8af80b5c86249",
+    "name": "Тамбов-2",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "000d3a2f44b0bad011ec0ca7b68089ad",
+    "name": "Тамбов-3",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "000d3a23b0dc80de11e7c947ba9fbee4",
+    "name": "Архангельск-1",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "000d3a2480c3812311e7e4b22ffb0d64",
+    "name": "Архангельск-2",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "fadae81539fc8a1611eeafc034aa3006",
+    "name": "Архангельск-3",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "000d3a240c719a8711e68aba13f91aee",
+    "name": "Благовещенск-1",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "000d3a23b0dc80de11e7c46db1eaa54c",
+    "name": "Благовещенск-2",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "ee040d87ae799eba11ed22dd9a539195",
+    "name": "Благовещенск-3",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "2e91e5a67a408b7011ee9e68bc119c0f",
+    "name": "Чита-3",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "000d3abf84c3bb3011ecb0f45f4ee0d2",
+    "name": "Чита-2",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "000d3a26b5b080df11e745fd0474b95c",
+    "name": "Чита-1",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "11f13b2e81633f39ae833ded17d07d70",
+    "name": "Чита-4",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "000d3a21da51a81411eaff32fcb6d269",
+    "name": "Северодвинск-1",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "125fb8d49d01a6f411ef2a53a4292f41",
+    "name": "Северодвинск-2",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  }
+]

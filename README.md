@@ -90,6 +90,10 @@ data. They validate period size, use the tool registry/policy allowlist, support
 `dry_run=true`, paginate where Dodo supports `skip/take`, and can project rows
 with `fields=id,name,total`.
 
+The production pizzeria catalog is stored in `configs/pizzerias.generated.json`.
+It contains the 16 units first discovered from OpenClaw reports and verified
+against Dodo IS read-only rating/vacancy endpoints.
+
 ## Dodo IS Web Auth
 
 Open `/auth/dodo` after configuring `DODO_AUTH_HELPER_COMMAND`. The helper uses
