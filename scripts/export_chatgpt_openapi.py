@@ -175,6 +175,35 @@ OPTIONAL_UNIT_COUNTRY_PARAMETERS: list[dict[str, Any]] = [
     },
 ]
 
+WRITEOFF_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
+    COMMON_PERIOD_PARAMETERS[:3]
+    + [
+        {
+            "name": "productNamePrefix",
+            "in": "query",
+            "required": False,
+            "description": "Product name prefix to include in the write-off summary. Use Кус for pizza slices.",
+            "schema": {"type": "string", "default": "Кус"},
+        },
+        {
+            "name": "includeProducts",
+            "in": "query",
+            "required": False,
+            "description": "When true, include per-product breakdown for each pizzeria.",
+            "schema": {"type": "boolean", "default": False},
+        },
+        {
+            "name": "includeReasons",
+            "in": "query",
+            "required": False,
+            "description": "When true, include per-reason breakdown for each pizzeria.",
+            "schema": {"type": "boolean", "default": False},
+        },
+        COMMON_PERIOD_PARAMETERS[4],
+    ]
+    + PAGINATION_PARAMETERS
+)
+
 
 def build_schema(server_url: str) -> dict[str, Any]:
     server_url = server_url.rstrip("/")
@@ -396,6 +425,23 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "responses": data_response("Product write-off rows."),
                 }
             },
+            "/dodo/accounting/writeoffs/products/summary": {
+                "get": {
+                    "operationId": "getDodoAccountingProductWriteoffSummary",
+                    "summary": "Get compact product write-off summary",
+                    "description": (
+                        "Read Dodo IS product write-offs and return a compact aggregation by pizzeria. "
+                        "Prefer this endpoint for requests like 'списания кусочков' or 'write-offs by slices', "
+                        "especially across many pizzerias, because it avoids returning raw rows and reduces "
+                        "ChatGPT Action response size."
+                    ),
+                    "parameters": WRITEOFF_SUMMARY_PARAMETERS,
+                    "responses": successful_response(
+                        "Aggregated product write-off summary.",
+                        "#/components/schemas/DodoWriteoffSummaryResponse",
+                    ),
+                }
+            },
             "/dodo/accounting/inventory-stocks": {
                 "get": {
                     "operationId": "getDodoAccountingInventoryStocks",
@@ -458,6 +504,13 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "MissingCapabilityPeriod": missing_capability_period_schema(),
                 "MissingCapabilityResponse": missing_capability_response_schema(),
                 "DodoDataResponse": dodo_data_response_schema(),
+                "DodoWriteoffSummaryResponse": dodo_writeoff_summary_response_schema(),
+                "DodoWriteoffSummarySource": dodo_writeoff_summary_source_schema(),
+                "DodoWriteoffSummaryFilter": dodo_writeoff_summary_filter_schema(),
+                "DodoWriteoffSummaryTotal": dodo_writeoff_summary_total_schema(),
+                "DodoWriteoffUnitSummary": dodo_writeoff_unit_summary_schema(),
+                "DodoWriteoffProductSummary": dodo_writeoff_product_summary_schema(),
+                "DodoWriteoffReasonSummary": dodo_writeoff_reason_summary_schema(),
                 "DodoRequest": dodo_request_schema(),
                 "DodoPagination": dodo_pagination_schema(),
                 "DodoRow": dodo_row_schema(),
@@ -722,6 +775,121 @@ def dodo_data_response_schema() -> dict[str, Any]:
             },
         },
         "required": ["function", "tool_name"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_writeoff_summary_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Compact read-only product write-off aggregation by pizzeria.",
+        "properties": {
+            "function": {"type": "string"},
+            "tool_name": {"type": "string"},
+            "dry_run": {"type": "boolean"},
+            "request": {"$ref": "#/components/schemas/DodoRequest"},
+            "filter": {"$ref": "#/components/schemas/DodoWriteoffSummaryFilter"},
+            "source": {"$ref": "#/components/schemas/DodoWriteoffSummarySource"},
+            "matched_row_count": {"type": "integer"},
+            "total": {"$ref": "#/components/schemas/DodoWriteoffSummaryTotal"},
+            "units": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoWriteoffUnitSummary"},
+            },
+            "pagination": {"$ref": "#/components/schemas/DodoPagination"},
+            "external_not_configured": {"type": "boolean"},
+        },
+        "required": ["function", "tool_name", "filter"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_writeoff_summary_source_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "rows_key": {"type": "string"},
+            "row_count": {"type": "integer"},
+            "pages_fetched": {"type": "integer"},
+            "truncated": {"type": "boolean"},
+            "next_skip": {"type": "integer"},
+        },
+        "additionalProperties": False,
+    }
+
+
+def dodo_writeoff_summary_filter_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "productNamePrefix": {"type": "string"},
+            "includeProducts": {"type": "boolean"},
+            "includeReasons": {"type": "boolean"},
+        },
+        "required": ["productNamePrefix", "includeProducts", "includeReasons"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_writeoff_summary_total_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "quantity": {"type": "number"},
+            "amount": {"type": "number"},
+            "rows": {"type": "integer"},
+        },
+        "required": ["quantity", "amount", "rows"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_writeoff_unit_summary_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "unitName": {"type": "string"},
+            "quantity": {"type": "number"},
+            "amount": {"type": "number"},
+            "rows": {"type": "integer"},
+            "products": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoWriteoffProductSummary"},
+            },
+            "reasons": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoWriteoffReasonSummary"},
+            },
+        },
+        "required": ["unitName", "quantity", "amount", "rows"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_writeoff_product_summary_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "productName": {"type": "string"},
+            "quantity": {"type": "number"},
+            "amount": {"type": "number"},
+            "rows": {"type": "integer"},
+        },
+        "required": ["productName", "quantity", "amount", "rows"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_writeoff_reason_summary_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "reason": {"type": "string"},
+            "quantity": {"type": "number"},
+            "amount": {"type": "number"},
+            "rows": {"type": "integer"},
+        },
+        "required": ["reason", "quantity", "amount", "rows"],
         "additionalProperties": False,
     }
 

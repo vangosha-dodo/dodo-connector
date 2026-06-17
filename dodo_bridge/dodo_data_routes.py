@@ -251,6 +251,59 @@ async def accounting_writeoffs_products(
     )
 
 
+@router.get("/accounting/writeoffs/products/summary")
+async def accounting_writeoffs_products_summary(
+    units: str = Query(..., description="Comma-separated Dodo unit ids."),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    product_name_prefix: str = Query(
+        default="Кус",
+        alias="productNamePrefix",
+        description="Only write-off rows whose productName starts with this prefix are included.",
+    ),
+    include_products: bool = Query(
+        default=False,
+        alias="includeProducts",
+        description="When true, include per-product breakdown inside each pizzeria.",
+    ),
+    include_reasons: bool = Query(
+        default=False,
+        alias="includeReasons",
+        description="When true, include per-reason breakdown inside each pizzeria.",
+    ),
+    take: int | None = Query(default=None, ge=1),
+    max_pages: int | None = Query(default=None, ge=1),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
+    result = await context.service.fetch_writeoff_products_summary(
+        parameters=params,
+        dry_run=dry_run,
+        product_name_prefix=product_name_prefix,
+        include_products=include_products,
+        include_reasons=include_reasons,
+        take=take,
+        max_pages=max_pages,
+    )
+    _record_dodo_audit(
+        context,
+        function_name="accounting_writeoffs_products_summary",
+        parameters={
+            **params,
+            "productNamePrefix": product_name_prefix,
+            "includeProducts": include_products,
+            "includeReasons": include_reasons,
+        },
+        dry_run=dry_run,
+        fields=None,
+        take=take,
+        max_pages=max_pages,
+        result=result,
+    )
+    return result
+
+
 @router.get("/accounting/inventory-stocks")
 async def accounting_inventory_stocks(
     units: str = Query(..., description="Comma-separated Dodo unit ids."),
@@ -428,6 +481,30 @@ async def _fetch(
         take=take,
         max_pages=max_pages,
     )
+    _record_dodo_audit(
+        context,
+        function_name=function_name,
+        parameters=parameters,
+        dry_run=dry_run,
+        fields=fields,
+        take=take,
+        max_pages=max_pages,
+        result=result,
+    )
+    return result
+
+
+def _record_dodo_audit(
+    context: RouteContext,
+    *,
+    function_name: str,
+    parameters: dict[str, Any],
+    dry_run: bool,
+    fields: str | None,
+    take: int | None,
+    max_pages: int | None,
+    result: dict[str, Any],
+) -> None:
     context.audit.record_event(
         actor=context.actor,
         intent=f"dodo_data:{function_name}",
@@ -445,4 +522,3 @@ async def _fetch(
         },
         response_chars=len(str(result)),
     )
-    return result

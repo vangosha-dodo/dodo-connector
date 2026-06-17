@@ -63,6 +63,12 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         description="Product write-off rows.",
         row_keys=("writeOffs", "writeoffs", "products", "items"),
     ),
+    "accounting_writeoffs_products_summary": DodoDataFunction(
+        name="accounting_writeoffs_products_summary",
+        tool_name="dodo_accounting_writeoffs_products",
+        description="Aggregated product write-off summary by unit.",
+        row_keys=("writeOffs", "writeoffs", "products", "items"),
+    ),
     "accounting_inventory_stocks": DodoDataFunction(
         name="accounting_inventory_stocks",
         tool_name="dodo_accounting_inventory_stocks",
@@ -97,6 +103,14 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         meta_keys=("periodFrom", "periodTo", "publishStatus", "publishedAt"),
     ),
 }
+
+WRITEOFF_PRODUCT_SUMMARY_FIELDS = [
+    "unitName",
+    "productName",
+    "quantity",
+    "pricePerPiece",
+    "reason",
+]
 
 
 class DodoDataService:
@@ -254,6 +268,57 @@ class DodoDataService:
             "rows": projected,
         }
 
+    async def fetch_writeoff_products_summary(
+        self,
+        *,
+        parameters: dict[str, Any],
+        dry_run: bool,
+        product_name_prefix: str,
+        include_products: bool,
+        include_reasons: bool,
+        take: int | None = None,
+        max_pages: int | None = None,
+    ) -> dict[str, Any]:
+        result = await self.fetch(
+            function_name="accounting_writeoffs_products_summary",
+            parameters=parameters,
+            dry_run=dry_run,
+            fields=WRITEOFF_PRODUCT_SUMMARY_FIELDS,
+            take=take,
+            max_pages=max_pages,
+        )
+        result["filter"] = {
+            "productNamePrefix": product_name_prefix,
+            "includeProducts": include_products,
+            "includeReasons": include_reasons,
+        }
+        if result.get("dry_run"):
+            return result
+
+        rows = result.get("rows")
+        if not isinstance(rows, list):
+            return result
+
+        summary = summarize_writeoff_product_rows(
+            rows,
+            product_name_prefix=product_name_prefix,
+            include_products=include_products,
+            include_reasons=include_reasons,
+        )
+        return {
+            "function": "accounting_writeoffs_products_summary",
+            "tool_name": result["tool_name"],
+            "filter": result["filter"],
+            "source": {
+                "rows_key": result.get("rows_key"),
+                "row_count": result.get("row_count"),
+                "pages_fetched": result.get("pages_fetched"),
+                "truncated": result.get("truncated"),
+                "next_skip": result.get("next_skip"),
+            },
+            **summary,
+        }
+
     def _allowed_tool(
         self,
         function: DodoDataFunction,
@@ -355,6 +420,130 @@ def project_rows(rows: list[Any], fields: list[str] | None) -> list[Any]:
             continue
         projected.append({field: row.get(field) for field in fields if field in row})
     return projected
+
+
+def summarize_writeoff_product_rows(
+    rows: list[Any],
+    *,
+    product_name_prefix: str,
+    include_products: bool = False,
+    include_reasons: bool = False,
+) -> dict[str, Any]:
+    prefix = product_name_prefix.casefold()
+    units: dict[str, dict[str, Any]] = {}
+    total = {"quantity": 0.0, "amount": 0.0, "rows": 0}
+    matched_row_count = 0
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        product_name = str(row.get("productName") or "")
+        if prefix and not product_name.casefold().startswith(prefix):
+            continue
+
+        matched_row_count += 1
+        unit_name = str(row.get("unitName") or "Неизвестная пиццерия")
+        quantity = _as_float(row.get("quantity"))
+        price_per_piece = _as_float(row.get("pricePerPiece"))
+        amount = quantity * price_per_piece
+        reason = str(row.get("reason") or "")
+
+        unit = units.setdefault(
+            unit_name,
+            {
+                "unitName": unit_name,
+                "quantity": 0.0,
+                "amount": 0.0,
+                "rows": 0,
+                "_products": {},
+                "_reasons": {},
+            },
+        )
+        _add_totals(unit, quantity, amount)
+        _add_totals(total, quantity, amount)
+
+        if include_products:
+            products = unit["_products"]
+            product = products.setdefault(
+                product_name,
+                {"productName": product_name, "quantity": 0.0, "amount": 0.0, "rows": 0},
+            )
+            _add_totals(product, quantity, amount)
+        if include_reasons and reason:
+            reasons = unit["_reasons"]
+            reason_item = reasons.setdefault(
+                reason,
+                {"reason": reason, "quantity": 0.0, "amount": 0.0, "rows": 0},
+            )
+            _add_totals(reason_item, quantity, amount)
+
+    unit_rows = []
+    for unit in sorted(units.values(), key=lambda item: item["unitName"]):
+        item = {
+            "unitName": unit["unitName"],
+            "quantity": _round_metric(unit["quantity"]),
+            "amount": _round_metric(unit["amount"]),
+            "rows": unit["rows"],
+        }
+        if include_products:
+            item["products"] = [
+                {
+                    "productName": product["productName"],
+                    "quantity": _round_metric(product["quantity"]),
+                    "amount": _round_metric(product["amount"]),
+                    "rows": product["rows"],
+                }
+                for product in sorted(
+                    unit["_products"].values(),
+                    key=lambda product: (-product["quantity"], product["productName"]),
+                )
+            ]
+        if include_reasons:
+            item["reasons"] = [
+                {
+                    "reason": reason["reason"],
+                    "quantity": _round_metric(reason["quantity"]),
+                    "amount": _round_metric(reason["amount"]),
+                    "rows": reason["rows"],
+                }
+                for reason in sorted(
+                    unit["_reasons"].values(),
+                    key=lambda reason: (-reason["quantity"], reason["reason"]),
+                )
+            ]
+        unit_rows.append(item)
+
+    return {
+        "matched_row_count": matched_row_count,
+        "total": {
+            "quantity": _round_metric(total["quantity"]),
+            "amount": _round_metric(total["amount"]),
+            "rows": total["rows"],
+        },
+        "units": unit_rows,
+    }
+
+
+def _add_totals(target: dict[str, Any], quantity: float, amount: float) -> None:
+    target["quantity"] += quantity
+    target["amount"] += amount
+    target["rows"] += 1
+
+
+def _as_float(value: Any) -> float:
+    if value in (None, ""):
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _round_metric(value: float) -> int | float:
+    rounded = round(value, 2)
+    if rounded.is_integer():
+        return int(rounded)
+    return rounded
 
 
 def external_http_error_detail(exc: httpx.HTTPStatusError, tool_name: str) -> dict[str, Any]:

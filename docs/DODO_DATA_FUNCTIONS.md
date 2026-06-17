@@ -126,6 +126,22 @@ The Bridge accepts `to` as an inclusive user date. This endpoint is translated
 to Dodo IS with an exclusive upper bound, so a one-day request like
 `from=2026-06-16&to=2026-06-16` calls Dodo with `to=2026-06-17`.
 
+### Product Write-offs Summary
+
+```http
+GET /dodo/accounting/writeoffs/products/summary?units=<unit-id>&from=2026-06-01&to=2026-06-02&productNamePrefix=Кус
+```
+
+Uses the same Dodo IS read-only product write-off endpoint, then aggregates
+inside the Bridge by pizzeria. Prefer this endpoint for broad ChatGPT requests
+like "списания кусочков по всем пиццериям", because it returns compact totals
+instead of raw rows and avoids `ResponseTooLargeError`.
+
+Optional flags:
+
+- `includeProducts=true` - include product breakdown by pizzeria.
+- `includeReasons=true` - include reason breakdown by pizzeria.
+
 ### Inventory Stocks
 
 ```http

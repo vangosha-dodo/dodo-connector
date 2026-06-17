@@ -57,6 +57,7 @@ OpenAPI is exposed at `http://127.0.0.1:8000/docs`.
 - `GET /dodo/delivery/statistics` - delivery statistics.
 - `GET /dodo/accounting/sales` - accounting sales rows.
 - `GET /dodo/accounting/writeoffs/products` - product write-off rows.
+- `GET /dodo/accounting/writeoffs/products/summary` - compact product write-off summary by pizzeria.
 - `GET /dodo/accounting/inventory-stocks` - inventory balances and runout estimates.
 - `GET /dodo/accounting/stock-consumptions-by-period` - ingredient consumption by period.
 - `GET /dodo/units/month-goals` - monthly goals for one unit.
@@ -89,6 +90,11 @@ The `/dodo/...` routes are the first ChatGPT-friendly functions for Dodo IS
 data. They validate period size, use the tool registry/policy allowlist, support
 `dry_run=true`, paginate where Dodo supports `skip/take`, and can project rows
 with `fields=id,name,total`.
+
+For broad questions such as "write-offs by pizza slices for all pizzerias", use
+`/dodo/accounting/writeoffs/products/summary` instead of the raw product
+write-off endpoint. The summary endpoint aggregates inside the Bridge and keeps
+ChatGPT Action responses small.
 
 The production pizzeria catalog is stored in `configs/pizzerias.generated.json`.
 It contains the 16 units first discovered from OpenClaw reports and verified
