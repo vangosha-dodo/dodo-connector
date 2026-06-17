@@ -4,6 +4,9 @@ Captured on 2026-06-17 from user-provided examples. These are setup notes only:
 do not fill or modify the referenced Google Sheets until each automation is
 implemented, tested in dry-run mode, and explicitly enabled.
 
+Detailed technical specification after live read-only inspection:
+`docs/GOOGLE_SHEETS_AUTOMATION_TZ.md`.
+
 ## Safety Boundary
 
 - Current ChatGPT Action surface remains read-only for Dodo IS and Superset.
