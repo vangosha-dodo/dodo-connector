@@ -20,6 +20,10 @@ Detailed technical specification after live read-only inspection:
 ## 1. Courier Payroll Daily Export and Weekly Payment Register
 
 - Priority: highest.
+- Implementation status: `courier_payroll_daily_export` has an internal
+  dry-run endpoint at `/automation/jobs/courier_payroll_daily_export/dry-run`.
+  It plans Office Manager extraction and Google Sheets append/upsert, but does
+  not write to Dodo IS or Google Sheets.
 - Spreadsheet: `А-2 Зп курьеров (с 30.03.26)_агент`.
 - URL: `https://docs.google.com/spreadsheets/d/1eq81n7NL7hgmSYYm6RRwA1-zlRnsBeXX0QW7uuN2dHU/edit?gid=2112197102#gid=2112197102`.
 - Source: Dodo IS Office Manager web interface.

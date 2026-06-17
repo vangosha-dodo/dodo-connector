@@ -92,6 +92,22 @@ class Settings(BaseSettings):
         default=180,
         validation_alias="DODO_AUTH_COMMAND_TIMEOUT_SECONDS",
     )
+    dodo_office_manager_helper_command: str | None = Field(
+        default=None,
+        validation_alias="DODO_OFFICE_MANAGER_HELPER_COMMAND",
+    )
+    dodo_office_manager_command_timeout_seconds: int = Field(
+        default=300,
+        validation_alias="DODO_OFFICE_MANAGER_COMMAND_TIMEOUT_SECONDS",
+    )
+    automation_google_sheets_write_enabled: bool = Field(
+        default=False,
+        validation_alias="AUTOMATION_GOOGLE_SHEETS_WRITE_ENABLED",
+    )
+    courier_payroll_spreadsheet_id: str = Field(
+        default="1eq81n7NL7hgmSYYm6RRwA1-zlRnsBeXX0QW7uuN2dHU",
+        validation_alias="COURIER_PAYROLL_SPREADSHEET_ID",
+    )
 
     @field_validator("api_keys", mode="before")
     @classmethod
@@ -109,7 +125,12 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @field_validator("superset_browser_helper_command", "dodo_auth_helper_command", mode="before")
+    @field_validator(
+        "superset_browser_helper_command",
+        "dodo_auth_helper_command",
+        "dodo_office_manager_helper_command",
+        mode="before",
+    )
     @classmethod
     def blank_string_to_none(cls, value: Any) -> Any:
         if value == "":

@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 
 from dodo_bridge.audit import AuditStore
 from dodo_bridge.analytics_routes import router as analytics_router
+from dodo_bridge.automation.routes import router as automation_router
 from dodo_bridge.auth_routes import router as dodo_auth_router
 from dodo_bridge.config import Settings, get_settings
 from dodo_bridge.connectors.dodo import DodoConnector
@@ -28,6 +29,7 @@ from dodo_bridge.system_routes import router as system_router
 
 app = FastAPI(title="Dodo ChatGPT Bridge", version="0.1.0")
 app.include_router(analytics_router)
+app.include_router(automation_router)
 app.include_router(dodo_auth_router)
 app.include_router(dodo_data_router)
 app.include_router(system_router)
