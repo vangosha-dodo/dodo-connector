@@ -106,6 +106,10 @@ The production pizzeria catalog is stored in `configs/pizzerias.generated.json`.
 It contains the 16 units first discovered from OpenClaw reports and verified
 against Dodo IS read-only rating/vacancy endpoints.
 
+Scheduled Google Sheets automations are tracked separately from the read-only
+ChatGPT Action surface. See `docs/AUTOMATION_CANDIDATES.md`; none of those jobs
+should write to sheets until implemented and explicitly enabled.
+
 ## Dodo IS Web Auth
 
 Open `/auth/dodo` after configuring `DODO_AUTH_HELPER_COMMAND`. The helper uses

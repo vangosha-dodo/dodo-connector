@@ -48,6 +48,14 @@
 3. Add idempotency keys and rollback/compensation notes where possible.
 4. Require a named human actor and store full audit context.
 
+## Phase 4A - Scheduled Google Sheets Automations
+
+1. Keep Dodo IS read-only, but allow explicitly approved Google Sheets writes.
+2. Implement dry-run previews before enabling any scheduled write job.
+3. Add idempotency, job locks, audit logs, and per-sheet/range allowlists.
+4. Start with the courier payroll daily export and weekly payment register.
+5. Track candidates in `docs/AUTOMATION_CANDIDATES.md`.
+
 ## Phase 5 - Production Hardening
 
 1. Add OAuth/mTLS if exposing to ChatGPT Apps/MCP.
@@ -55,4 +63,3 @@
 3. Add backup/retention policy for audit data.
 4. Add deployment manifests for the Ubuntu server.
 5. Add CI for tests and policy linting.
-
