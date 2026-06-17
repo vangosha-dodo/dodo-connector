@@ -204,6 +204,28 @@ WRITEOFF_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
     + PAGINATION_PARAMETERS
 )
 
+SLICE_WRITEOFF_RATE_PARAMETERS: list[dict[str, Any]] = (
+    COMMON_PERIOD_PARAMETERS[:3]
+    + [
+        {
+            "name": "productNamePrefix",
+            "in": "query",
+            "required": False,
+            "description": "Product name prefix to count as slices. Use Кус for pizza slices.",
+            "schema": {"type": "string", "default": "Кус"},
+        },
+        {
+            "name": "includeProducts",
+            "in": "query",
+            "required": False,
+            "description": "When true, include per-product rate details for each pizzeria.",
+            "schema": {"type": "boolean", "default": False},
+        },
+        COMMON_PERIOD_PARAMETERS[4],
+    ]
+    + PAGINATION_PARAMETERS
+)
+
 
 def build_schema(server_url: str) -> dict[str, Any]:
     server_url = server_url.rstrip("/")
@@ -442,6 +464,23 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ),
                 }
             },
+            "/dodo/accounting/slices/writeoff-rate": {
+                "get": {
+                    "operationId": "getDodoSliceWriteoffRate",
+                    "summary": "Get slice write-off percent from laid-out quantity",
+                    "description": (
+                        "Read Dodo IS product write-offs and accounting sales, then return a compact "
+                        "slice write-off rate by pizzeria. Use this for questions like 'списания кусочков "
+                        "в процентах от выложенного количества'. The Bridge computes laidOutQuantity as "
+                        "soldQuantity + writeoffQuantity and does not return raw sales or write-off rows."
+                    ),
+                    "parameters": SLICE_WRITEOFF_RATE_PARAMETERS,
+                    "responses": successful_response(
+                        "Slice write-off rate by pizzeria.",
+                        "#/components/schemas/DodoSliceWriteoffRateResponse",
+                    ),
+                }
+            },
             "/dodo/accounting/inventory-stocks": {
                 "get": {
                     "operationId": "getDodoAccountingInventoryStocks",
@@ -511,6 +550,11 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "DodoWriteoffUnitSummary": dodo_writeoff_unit_summary_schema(),
                 "DodoWriteoffProductSummary": dodo_writeoff_product_summary_schema(),
                 "DodoWriteoffReasonSummary": dodo_writeoff_reason_summary_schema(),
+                "DodoSliceWriteoffRateResponse": dodo_slice_writeoff_rate_response_schema(),
+                "DodoSliceWriteoffRateSource": dodo_slice_writeoff_rate_source_schema(),
+                "DodoSliceWriteoffRateTotal": dodo_slice_writeoff_rate_total_schema(),
+                "DodoSliceWriteoffRateUnit": dodo_slice_writeoff_rate_unit_schema(),
+                "DodoSliceWriteoffRateProduct": dodo_slice_writeoff_rate_product_schema(),
                 "DodoRequest": dodo_request_schema(),
                 "DodoPagination": dodo_pagination_schema(),
                 "DodoRow": dodo_row_schema(),
@@ -892,6 +936,106 @@ def dodo_writeoff_reason_summary_schema() -> dict[str, Any]:
         "required": ["reason", "quantity", "amount", "rows"],
         "additionalProperties": False,
     }
+
+
+def dodo_slice_writeoff_rate_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Compact read-only slice write-off rate computed from Dodo IS sales and write-offs.",
+        "properties": {
+            "function": {"type": "string"},
+            "tool_name": {"type": "string"},
+            "dry_run": {"type": "boolean"},
+            "requests": {
+                "type": "object",
+                "description": "Planned outbound requests for dry-run responses.",
+                "properties": {
+                    "writeoffs": {"$ref": "#/components/schemas/DodoRequest"},
+                    "sales": {"$ref": "#/components/schemas/DodoRequest"},
+                },
+                "additionalProperties": False,
+            },
+            "filter": {"$ref": "#/components/schemas/DodoWriteoffSummaryFilter"},
+            "formula": {"type": "string"},
+            "source": {"$ref": "#/components/schemas/DodoSliceWriteoffRateSource"},
+            "matchedWriteoffRows": {"type": "integer"},
+            "matchedSalesProducts": {"type": "integer"},
+            "total": {"$ref": "#/components/schemas/DodoSliceWriteoffRateTotal"},
+            "units": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoSliceWriteoffRateUnit"},
+            },
+        },
+        "required": ["function", "tool_name", "filter"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_slice_writeoff_rate_source_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "writeoffs": {"$ref": "#/components/schemas/DodoWriteoffSummarySource"},
+            "sales": {"$ref": "#/components/schemas/DodoWriteoffSummarySource"},
+        },
+        "required": ["writeoffs", "sales"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_slice_writeoff_rate_total_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "soldQuantity": {"type": "number"},
+            "writeoffQuantity": {"type": "number"},
+            "laidOutQuantity": {"type": "number"},
+            "writeoffPercent": {"type": "number"},
+            "soldAmount": {"type": "number"},
+            "writeoffAmount": {"type": "number"},
+            "laidOutAmount": {"type": "number"},
+            "soldRows": {"type": "integer"},
+            "writeoffRows": {"type": "integer"},
+            "salesRowsWithSlices": {"type": "integer"},
+        },
+        "required": [
+            "soldQuantity",
+            "writeoffQuantity",
+            "laidOutQuantity",
+            "writeoffPercent",
+            "soldAmount",
+            "writeoffAmount",
+            "laidOutAmount",
+            "soldRows",
+            "writeoffRows",
+            "salesRowsWithSlices",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def dodo_slice_writeoff_rate_unit_schema() -> dict[str, Any]:
+    schema = dodo_slice_writeoff_rate_total_schema()
+    schema["properties"] = {
+        "unitName": {"type": "string"},
+        **schema["properties"],
+        "products": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/DodoSliceWriteoffRateProduct"},
+        },
+    }
+    schema["required"] = ["unitName", *schema["required"]]
+    return schema
+
+
+def dodo_slice_writeoff_rate_product_schema() -> dict[str, Any]:
+    schema = dodo_slice_writeoff_rate_total_schema()
+    schema["properties"] = {
+        "productName": {"type": "string"},
+        **schema["properties"],
+    }
+    schema["required"] = ["productName", *schema["required"]]
+    return schema
 
 
 def employee_discount_request_schema() -> dict[str, Any]:

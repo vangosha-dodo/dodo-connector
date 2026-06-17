@@ -58,6 +58,7 @@ OpenAPI is exposed at `http://127.0.0.1:8000/docs`.
 - `GET /dodo/accounting/sales` - accounting sales rows.
 - `GET /dodo/accounting/writeoffs/products` - product write-off rows.
 - `GET /dodo/accounting/writeoffs/products/summary` - compact product write-off summary by pizzeria.
+- `GET /dodo/accounting/slices/writeoff-rate` - slice write-off percent from sold plus written-off quantity.
 - `GET /dodo/accounting/inventory-stocks` - inventory balances and runout estimates.
 - `GET /dodo/accounting/stock-consumptions-by-period` - ingredient consumption by period.
 - `GET /dodo/units/month-goals` - monthly goals for one unit.
@@ -95,6 +96,11 @@ For broad questions such as "write-offs by pizza slices for all pizzerias", use
 `/dodo/accounting/writeoffs/products/summary` instead of the raw product
 write-off endpoint. The summary endpoint aggregates inside the Bridge and keeps
 ChatGPT Action responses small.
+
+For "write-offs as a percent of laid-out slice quantity", use
+`/dodo/accounting/slices/writeoff-rate`. The Bridge computes
+`laidOutQuantity = soldQuantity + writeoffQuantity` from read-only Dodo IS sales
+and product write-offs, then returns `writeoffPercent`.
 
 The production pizzeria catalog is stored in `configs/pizzerias.generated.json`.
 It contains the 16 units first discovered from OpenClaw reports and verified

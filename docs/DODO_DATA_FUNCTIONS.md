@@ -110,6 +110,9 @@ Uses:
 GET /dodopizza/{country}/accounting/sales
 ```
 
+The Bridge accepts `to` as an inclusive user date and sends Dodo IS an exclusive
+upper bound for this endpoint.
+
 ### Product Write-offs
 
 ```http
@@ -141,6 +144,28 @@ Optional flags:
 
 - `includeProducts=true` - include product breakdown by pizzeria.
 - `includeReasons=true` - include reason breakdown by pizzeria.
+
+### Slice Write-off Rate
+
+```http
+GET /dodo/accounting/slices/writeoff-rate?units=<unit-id>&from=2026-06-01&to=2026-06-02&productNamePrefix=Кус
+```
+
+Uses read-only Dodo IS product write-offs plus accounting sales. The Bridge
+counts sales products whose name starts with `productNamePrefix`, then computes:
+
+```text
+laidOutQuantity = soldQuantity + writeoffQuantity
+writeoffPercent = writeoffQuantity / laidOutQuantity * 100
+```
+
+Use this for questions like "списания кусочков в процентах от выложенного
+количества". The endpoint returns compact totals by pizzeria and does not
+return raw sales or write-off rows.
+
+Optional flag:
+
+- `includeProducts=true` - include per-product percentages inside each pizzeria.
 
 ### Inventory Stocks
 

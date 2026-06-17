@@ -216,7 +216,7 @@ async def accounting_sales(
     dry_run: bool = Query(default=False),
     context: RouteContext = Depends(),
 ) -> dict[str, Any]:
-    params = _period_params(context.settings, units, from_date, to_date)
+    params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
     return await _fetch(
         context,
         function_name="accounting_sales",
@@ -299,6 +299,56 @@ async def accounting_writeoffs_products_summary(
         fields=None,
         take=take,
         max_pages=max_pages,
+        result=result,
+    )
+    return result
+
+
+@router.get("/accounting/slices/writeoff-rate")
+async def accounting_slices_writeoff_rate(
+    units: str = Query(..., description="Comma-separated Dodo unit ids."),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    product_name_prefix: str = Query(
+        default="Кус",
+        alias="productNamePrefix",
+        description="Only products whose name starts with this prefix are counted as slices.",
+    ),
+    include_products: bool = Query(
+        default=False,
+        alias="includeProducts",
+        description="When true, include per-product write-off rate inside each pizzeria.",
+    ),
+    take: int | None = Query(default=None, ge=1),
+    max_pages: int | None = Query(default=None, ge=1),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    sales_params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
+    writeoff_params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
+    take_value = take or context.settings.dodo_data_max_take
+    max_pages_value = max_pages or context.settings.dodo_data_max_pages
+    result = await context.service.fetch_slice_writeoff_rate(
+        sales_parameters=sales_params,
+        writeoff_parameters=writeoff_params,
+        dry_run=dry_run,
+        product_name_prefix=product_name_prefix,
+        include_products=include_products,
+        take=take_value,
+        max_pages=max_pages_value,
+    )
+    _record_dodo_audit(
+        context,
+        function_name="accounting_slice_writeoff_rate",
+        parameters={
+            **sales_params,
+            "productNamePrefix": product_name_prefix,
+            "includeProducts": include_products,
+        },
+        dry_run=dry_run,
+        fields=None,
+        take=take_value,
+        max_pages=max_pages_value,
         result=result,
     )
     return result

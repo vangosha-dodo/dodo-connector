@@ -22,6 +22,7 @@ def test_dodo_functions_list(tmp_path) -> None:
     names = {item["name"] for item in response.json()["functions"]}
     assert "accounting_sales" in names
     assert "accounting_inventory_stocks" in names
+    assert "accounting_slice_writeoff_rate" in names
     assert "accounting_stock_consumptions_by_period" in names
     assert "accounting_writeoffs_products_summary" in names
     assert "courier_orders" in names
@@ -53,6 +54,7 @@ def test_dodo_accounting_sales_dry_run(tmp_path) -> None:
     assert payload["function"] == "accounting_sales"
     assert payload["dry_run"] is True
     assert "/accounting/sales" in payload["request"]["url"]
+    assert "to=2026-06-03" in payload["request"]["url"]
     assert "take=100" in payload["request"]["url"]
 
 
@@ -242,6 +244,135 @@ def test_dodo_accounting_writeoffs_products_summary_aggregates_slice_rows(tmp_pa
             "reasons": [{"reason": "ExpiredShowcaseTime", "quantity": 1.5, "amount": 135, "rows": 1}],
         },
     ]
+
+
+def test_dodo_accounting_slices_writeoff_rate_dry_run_plans_sales_and_writeoffs(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/slices/writeoff-rate",
+            params={
+                "units": "unit-1,unit-2",
+                "from": "2026-06-16",
+                "to": "2026-06-16",
+                "dry_run": "true",
+                "take": "100",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "accounting_slice_writeoff_rate"
+    assert payload["dry_run"] is True
+    assert payload["filter"]["productNamePrefix"] == "Кус"
+    assert "/accounting/write-offs/products" in payload["requests"]["writeoffs"]["url"]
+    assert "/accounting/sales" in payload["requests"]["sales"]["url"]
+    assert "from=2026-06-16" in payload["requests"]["sales"]["url"]
+    assert "to=2026-06-17" in payload["requests"]["sales"]["url"]
+    assert "to=2026-06-17" in payload["requests"]["writeoffs"]["url"]
+
+
+def test_dodo_accounting_slices_writeoff_rate_aggregates_sales_and_writeoffs(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, parameters, dry_run
+        if tool.name == "dodo_accounting_writeoffs_products":
+            return {
+                "writeOffs": [
+                    {
+                        "unitName": "Тамбов-1",
+                        "productName": "Кус Пепперони 1 шт",
+                        "quantity": 2,
+                        "pricePerPiece": 100,
+                    },
+                    {
+                        "unitName": "Тамбов-1",
+                        "productName": "Кус Песто 1 шт",
+                        "quantity": 1,
+                        "pricePerPiece": 90,
+                    },
+                    {
+                        "unitName": "Тамбов-1",
+                        "productName": "Сырники 1 шт",
+                        "quantity": 9,
+                        "pricePerPiece": 50,
+                    },
+                    {
+                        "unitName": "Чита-1",
+                        "productName": "Кус Пепперони 1 шт",
+                        "quantity": 3,
+                        "pricePerPiece": 100,
+                    },
+                ]
+            }
+        if tool.name == "dodo_accounting_sales":
+            return {
+                "sales": [
+                    {
+                        "unitName": "Тамбов-1",
+                        "products": [
+                            {"defaultProductName": "Кус Пепперони 1 шт", "priceWithDiscount": 100},
+                            {"defaultProductName": "Кус Пепперони 1 шт", "priceWithDiscount": 100},
+                            {"defaultProductName": "Кус Песто 1 шт", "priceWithDiscount": 80},
+                            {"defaultProductName": "Напиток", "priceWithDiscount": 70},
+                        ],
+                    },
+                    {
+                        "unitName": "Тамбов-1",
+                        "products": [
+                            {"defaultProductName": "Кус Песто 1 шт", "price": 90, "quantity": 2},
+                        ],
+                    },
+                    {
+                        "unitName": "Чита-1",
+                        "products": [
+                            {"defaultProductName": "Кус Пепперони 1 шт", "priceWithDiscount": 100},
+                        ],
+                    },
+                ]
+            }
+        raise AssertionError(tool.name)
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/slices/writeoff-rate",
+            params={
+                "units": "unit-1,unit-2",
+                "from": "2026-06-16",
+                "to": "2026-06-16",
+                "take": "10",
+                "max_pages": "1",
+                "includeProducts": "true",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "accounting_slice_writeoff_rate"
+    assert payload["total"]["soldQuantity"] == 6
+    assert payload["total"]["writeoffQuantity"] == 6
+    assert payload["total"]["laidOutQuantity"] == 12
+    assert payload["total"]["writeoffPercent"] == 50
+    assert payload["units"][0]["unitName"] == "Тамбов-1"
+    assert payload["units"][0]["soldQuantity"] == 5
+    assert payload["units"][0]["writeoffQuantity"] == 3
+    assert payload["units"][0]["laidOutQuantity"] == 8
+    assert payload["units"][0]["writeoffPercent"] == 37.5
+    assert payload["units"][0]["salesRowsWithSlices"] == 2
+    assert payload["units"][1]["unitName"] == "Чита-1"
+    assert payload["units"][1]["writeoffPercent"] == 75
+    assert "rows" not in payload
+    assert payload["source"]["sales"]["row_count"] == 3
+    assert payload["source"]["writeoffs"]["row_count"] == 4
 
 
 def test_dodo_data_external_http_error_returns_controlled_response(tmp_path, monkeypatch) -> None:
