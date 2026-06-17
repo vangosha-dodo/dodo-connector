@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from dodo_bridge.automation.office_manager import OfficeManagerCommandResult
 from dodo_bridge.automation.routes import settings_dep as automation_settings_dep
 from dodo_bridge.config import Settings
 from dodo_bridge.main import app
@@ -92,6 +93,76 @@ def test_courier_payroll_daily_export_rejects_unknown_pizzeria(tmp_path) -> None
     assert response.json()["detail"] == "No pizzerias matched the requested filter"
 
 
+def test_courier_payroll_daily_export_normalizes_helper_rows(tmp_path, monkeypatch) -> None:
+    async def fake_run(self, action, payload):  # noqa: ANN001
+        del self
+        assert action == "courier-payroll-daily"
+        assert payload["report_date"] == "2026-06-16"
+        return OfficeManagerCommandResult(
+            configured=True,
+            ok=True,
+            action=action,
+            data={
+                "ok": True,
+                "rows": [
+                    {
+                        "shiftStartDate": "2026-06-16",
+                        "shiftStartTime": "10:00",
+                        "shiftEndTime": "18:00",
+                        "lastName": "Иванов",
+                        "firstName": "Петр",
+                        "employeeId": 123,
+                        "employeeUuid": "uuid-123",
+                        "employmentType": "Самозанятый",
+                        "unitName": "Тамбов-1",
+                        "ordersCount": 12,
+                        "distanceKm": 42.5,
+                    }
+                ],
+            },
+        )
+
+    monkeypatch.setattr("dodo_bridge.automation.jobs.DodoOfficeManagerCommandRunner.run", fake_run)
+    pizzerias_path = write_pizzerias(tmp_path)
+    settings = make_settings(
+        tmp_path,
+        dodo_pizzerias_path=pizzerias_path,
+        dodo_office_manager_helper_command="node scripts/dodo_office_manager_reports.mjs",
+    )
+    app.dependency_overrides[automation_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/automation/jobs/courier_payroll_daily_export/dry-run",
+            json={
+                "report_date": "2026-06-16",
+                "pizzerias": ["Тамбов-1"],
+                "extract_source": True,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"]["helper_configured"] is True
+    assert payload["source"]["helper_called"] is True
+    assert payload["source"]["helper_ok"] is True
+    assert payload["source"]["row_count"] == 1
+    assert payload["row_summary"]["ready_rows"] == 1
+    assert payload["row_summary"]["invalid_rows"] == 0
+    preview = payload["planned_rows_preview"][0]
+    assert preview["pizzeria"] == "Тамбов-1"
+    assert preview["employee"] == {"id": 123, "uuid": "uuid-123", "name": "Иванов Петр"}
+    assert preview["shift"] == {"start": "2026-06-16 10:00", "end": "2026-06-16 18:00"}
+    assert len(preview["upsert_match_key"]) == 64
+    assert len(preview["source_row_hash"]) == 64
+    formulas = payload["planned_writes"][0]["formula_templates"]
+    assert formulas["Итого зп"]["column"] == "BC"
+    assert formulas["Итого зп"]["formula"].startswith("=V{row}+W{row}")
+    assert formulas["Неделя"]["column"] == "BD"
+
+
 def test_automation_run_is_blocked_while_writes_are_disabled(tmp_path) -> None:
     settings = make_settings(tmp_path)
     app.dependency_overrides[automation_settings_dep] = lambda: settings
@@ -139,6 +210,7 @@ def make_settings(
     tmp_path: Path,
     *,
     dodo_pizzerias_path: Path | None = None,
+    dodo_office_manager_helper_command: str | None = None,
 ) -> Settings:
     return Settings(
         api_keys=[],
@@ -147,5 +219,6 @@ def make_settings(
         audit_db_path=tmp_path / "audit.sqlite3",
         dodo_access_token=None,
         dodo_pizzerias_path=dodo_pizzerias_path,
+        dodo_office_manager_helper_command=dodo_office_manager_helper_command,
         automation_google_sheets_write_enabled=False,
     )

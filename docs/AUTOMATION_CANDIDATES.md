@@ -23,7 +23,9 @@ Detailed technical specification after live read-only inspection:
 - Implementation status: `courier_payroll_daily_export` has an internal
   dry-run endpoint at `/automation/jobs/courier_payroll_daily_export/dry-run`.
   It plans Office Manager extraction and Google Sheets append/upsert, but does
-  not write to Dodo IS or Google Sheets.
+  not write to Dodo IS or Google Sheets. The read-only Office Manager helper
+  `scripts/dodo_office_manager_reports.py` can export courier salary rows from
+  `/Reports/Salary/Export`; smoke-tested against `Тамбов-1` for `2026-06-16`.
 - Spreadsheet: `А-2 Зп курьеров (с 30.03.26)_агент`.
 - URL: `https://docs.google.com/spreadsheets/d/1eq81n7NL7hgmSYYm6RRwA1-zlRnsBeXX0QW7uuN2dHU/edit?gid=2112197102#gid=2112197102`.
 - Source: Dodo IS Office Manager web interface.
