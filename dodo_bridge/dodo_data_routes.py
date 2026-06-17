@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -239,7 +239,7 @@ async def accounting_writeoffs_products(
     dry_run: bool = Query(default=False),
     context: RouteContext = Depends(),
 ) -> dict[str, Any]:
-    params = _period_params(context.settings, units, from_date, to_date)
+    params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
     return await _fetch(
         context,
         function_name="accounting_writeoffs_products",
@@ -378,12 +378,15 @@ def _period_params(
     units: str,
     from_date: date,
     to_date: date,
+    *,
+    exclusive_to: bool = False,
 ) -> dict[str, Any]:
     validate_period(from_date, to_date, settings)
+    api_to_date = to_date + timedelta(days=1) if exclusive_to else to_date
     return {
         "units": normalize_units(units),
         "from": from_date.isoformat(),
-        "to": to_date.isoformat(),
+        "to": api_to_date.isoformat(),
     }
 
 

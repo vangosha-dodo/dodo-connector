@@ -118,6 +118,10 @@ Uses:
 GET /dodopizza/{country}/accounting/write-offs/products
 ```
 
+The Bridge accepts `to` as an inclusive user date. This endpoint is translated
+to Dodo IS with an exclusive upper bound, so a one-day request like
+`from=2026-06-16&to=2026-06-16` calls Dodo with `to=2026-06-17`.
+
 ### Inventory Stocks
 
 ```http

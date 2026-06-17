@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
+import httpx
 from fastapi import HTTPException
 
 from dodo_bridge.config import Settings
@@ -165,7 +166,7 @@ class DodoDataService:
             }
 
         if not function.paginated:
-            payload = await self.connector.invoke(tool, base_params, dry_run=False)
+            payload = await self._invoke_tool(tool, base_params)
             if _is_connector_dry_run(payload):
                 return {
                     "function": function.name,
@@ -203,7 +204,7 @@ class DodoDataService:
             page_params = dict(base_params)
             page_params["skip"] = page * take_value
             page_params["take"] = take_value
-            payload = await self.connector.invoke(tool, page_params, dry_run=False)
+            payload = await self._invoke_tool(tool, page_params)
             if _is_connector_dry_run(payload):
                 return {
                     "function": function.name,
@@ -291,6 +292,15 @@ class DodoDataService:
         pages = value or self.settings.dodo_data_default_max_pages
         return max(1, min(pages, self.settings.dodo_data_max_pages))
 
+    async def _invoke_tool(self, tool: ToolSpec, parameters: dict[str, Any]) -> Any:
+        try:
+            return await self.connector.invoke(tool, parameters, dry_run=False)
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=external_http_error_detail(exc, tool.name),
+            ) from exc
+
 
 def normalize_units(units: str) -> str:
     values = [item.strip() for item in units.replace(";", ",").split(",") if item.strip()]
@@ -345,6 +355,34 @@ def project_rows(rows: list[Any], fields: list[str] | None) -> list[Any]:
             continue
         projected.append({field: row.get(field) for field in fields if field in row})
     return projected
+
+
+def external_http_error_detail(exc: httpx.HTTPStatusError, tool_name: str) -> dict[str, Any]:
+    response = exc.response
+    detail: dict[str, Any] = {
+        "error": "external_http_error",
+        "tool_name": tool_name,
+        "external_status": response.status_code,
+    }
+    try:
+        payload: Any = response.json()
+    except ValueError:
+        payload = response.text
+
+    if isinstance(payload, dict):
+        code = payload.get("code") or payload.get("Code")
+        message = payload.get("message") or payload.get("Message")
+        details = payload.get("details") or payload.get("Details")
+        if code:
+            detail["external_code"] = code
+        if message:
+            detail["external_message"] = message
+        if details:
+            detail["external_details"] = details
+    elif payload:
+        detail["external_body_preview"] = str(payload)[:500]
+
+    return detail
 
 
 def extract_meta(payload: Any, keys: tuple[str, ...]) -> dict[str, Any]:

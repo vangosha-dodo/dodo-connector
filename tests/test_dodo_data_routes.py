@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import httpx
 from fastapi.testclient import TestClient
 
 from dodo_bridge.config import Settings
@@ -94,6 +95,74 @@ def test_dodo_accounting_sales_paginates_and_projects(tmp_path, monkeypatch) -> 
         {"id": "s2", "amount": 20},
         {"id": "s3", "amount": 30},
     ]
+
+
+def test_dodo_accounting_writeoffs_products_dry_run_uses_exclusive_to_date(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/writeoffs/products",
+            params={
+                "units": "unit-1,unit-2",
+                "from": "2026-06-16",
+                "to": "2026-06-16",
+                "dry_run": "true",
+                "take": "100",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "accounting_writeoffs_products"
+    assert payload["dry_run"] is True
+    assert "/accounting/write-offs/products" in payload["request"]["url"]
+    assert "from=2026-06-16" in payload["request"]["url"]
+    assert "to=2026-06-17" in payload["request"]["url"]
+
+
+def test_dodo_data_external_http_error_returns_controlled_response(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, parameters, dry_run
+        request = httpx.Request("GET", "https://api.dodois.io/example")
+        response = httpx.Response(
+            400,
+            json={
+                "code": "ValidationError",
+                "message": "Bad query",
+                "details": {"errors": [{"message": "From should be less than To."}]},
+            },
+            request=request,
+        )
+        raise httpx.HTTPStatusError("Bad Request", request=request, response=response)
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/sales",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-16",
+                "to": "2026-06-16",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 502
+    detail = response.json()["detail"]
+    assert detail["error"] == "external_http_error"
+    assert detail["tool_name"] == "dodo_accounting_sales"
+    assert detail["external_status"] == 400
+    assert detail["external_code"] == "ValidationError"
+    assert detail["external_message"] == "Bad query"
+    assert detail["external_details"]["errors"][0]["message"] == "From should be less than To."
 
 
 def test_dodo_accounting_inventory_stocks_dry_run(tmp_path) -> None:
