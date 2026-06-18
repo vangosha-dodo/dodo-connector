@@ -134,6 +134,18 @@ Metrics:
 For large periods, the endpoint fetches Dodo pages per pizzeria in parallel.
 If `complete=false`, increase `maxPagesPerUnit` or split the period.
 
+Cache modes:
+
+- `cacheMode=auto` - default. Use cached daily pizzeria summaries when all
+  requested days are present; fetch missing units live and save daily rows.
+- `cacheMode=refresh` - recalculate the requested period live and overwrite
+  cached daily summaries.
+- `cacheMode=bypass` - ignore cache and do not write cache rows.
+
+The response `source` block shows `dailyRowsHit`, `dailyRowsMissed`,
+`cacheWrites`, and `unitsFetchedLive`, so the agent can explain whether the
+answer came from cache or live Dodo API reads.
+
 ### Product Write-offs
 
 ```http

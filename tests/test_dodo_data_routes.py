@@ -191,6 +191,73 @@ def test_dodo_accounting_sales_summary_aggregates_by_unit(tmp_path, monkeypatch)
     assert payload["source"]["pagesFetched"] == 3
 
 
+def test_dodo_accounting_sales_summary_uses_cache_on_second_call(tmp_path, monkeypatch) -> None:
+    calls = []
+
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        calls.append((parameters["units"], parameters["skip"]))
+        if parameters["skip"] == 0:
+            return {
+                "sales": [
+                    {
+                        "soldAtLocal": "2026-06-01T10:00:00",
+                        "unitId": "unit-1",
+                        "unitName": "Точка 1",
+                        "products": [
+                            {"price": 100, "priceWithDiscount": 90},
+                            {"price": 50, "priceWithDiscount": 40},
+                        ],
+                    }
+                ]
+            }
+        return {"sales": []}
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        first = client.get(
+            "/dodo/accounting/sales/summary",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-01",
+                "take": "10",
+            },
+        )
+        second = client.get(
+            "/dodo/accounting/sales/summary",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-01",
+                "take": "10",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert first.status_code == 200
+    first_payload = first.json()
+    assert first_payload["total"]["salesWithDiscount"] == 130
+    assert first_payload["source"]["dailyRowsHit"] == 0
+    assert first_payload["source"]["cacheWrites"] == 1
+    assert first_payload["source"]["unitsFetchedLive"] == ["unit-1"]
+    assert calls == [("unit-1", 0)]
+
+    assert second.status_code == 200
+    second_payload = second.json()
+    assert second_payload["total"]["salesWithDiscount"] == 130
+    assert second_payload["source"]["dailyRowsHit"] == 1
+    assert second_payload["source"]["cacheWrites"] == 0
+    assert second_payload["source"]["pagesFetched"] == 0
+    assert second_payload["source"]["unitsFetchedLive"] == []
+    assert second_payload["units"][0]["source"]["cache"] == "hit"
+    assert calls == [("unit-1", 0)]
+
+
 def test_dodo_accounting_writeoffs_products_dry_run_uses_exclusive_to_date(tmp_path) -> None:
     settings = make_settings(tmp_path)
     app.dependency_overrides[dodo_data_settings_dep] = lambda: settings

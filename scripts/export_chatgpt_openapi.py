@@ -93,6 +93,13 @@ SALES_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
             "description": "How many pizzerias the Bridge may aggregate in parallel.",
             "schema": {"type": "integer", "minimum": 1, "maximum": 8, "default": 4},
         },
+        {
+            "name": "cacheMode",
+            "in": "query",
+            "required": False,
+            "description": "auto uses cached daily summaries and fills misses; refresh recalculates and stores; bypass ignores cache.",
+            "schema": {"type": "string", "enum": ["auto", "refresh", "bypass"], "default": "auto"},
+        },
     ]
 )
 
@@ -939,14 +946,18 @@ def dodo_sales_summary_unit_schema() -> dict[str, Any]:
         "unitName": {"type": "string"},
         "source": {
             "type": "object",
-            "properties": {
-                "rowsKey": {"type": "string"},
-                "pagesFetched": {"type": "integer"},
-                "truncated": {"type": "boolean"},
-                "nextSkip": {"type": "integer"},
+                "properties": {
+                    "rowsKey": {"type": "string"},
+                    "pagesFetched": {"type": "integer"},
+                    "truncated": {"type": "boolean"},
+                    "nextSkip": {"type": "integer"},
+                    "cache": {"type": "string"},
+                    "days": {"type": "integer"},
+                    "refreshedAtMin": {"type": "string"},
+                    "refreshedAtMax": {"type": "string"},
+                },
+                "additionalProperties": False,
             },
-            "additionalProperties": False,
-        },
     }
     schema["required"] = [*schema["required"], "unitId"]
     return schema
@@ -971,6 +982,15 @@ def dodo_sales_summary_source_schema() -> dict[str, Any]:
                     },
                     "additionalProperties": False,
                 },
+            },
+            "cacheMode": {"type": "string", "enum": ["auto", "refresh", "bypass"]},
+            "dailyRowsRequested": {"type": "integer"},
+            "dailyRowsHit": {"type": "integer"},
+            "dailyRowsMissed": {"type": "integer"},
+            "cacheWrites": {"type": "integer"},
+            "unitsFetchedLive": {
+                "type": "array",
+                "items": {"type": "string"},
             },
         },
         "additionalProperties": False,

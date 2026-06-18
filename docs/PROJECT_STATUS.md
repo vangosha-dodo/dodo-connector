@@ -95,6 +95,7 @@ answers instead of huge raw Dodo rows.
   - For questions like "выручка по всем пиццериям за май 2026".
   - `salesWithDiscount` is computed from `products[].priceWithDiscount`.
   - `salesWithoutDiscount` is computed from `products[].price`.
+  - Supports daily SQLite cache modes: `auto`, `refresh`, and `bypass`.
 
 ### Superset read-only capabilities
 
@@ -146,8 +147,9 @@ raw accounting sales:
 - Product rows aggregated: `926037`
 - Dodo pages fetched: `243`
 
-This full-month live computation took about 4 minutes 25 seconds, which means
-the next infrastructure step should be caching or scheduled pre-aggregation.
+This full-month live computation took about 4 minutes 25 seconds. A daily
+SQLite cache has been added so repeated requests can answer from Bridge cache
+after the first calculation or scheduled refresh.
 
 ## Known Issues And Constraints
 
@@ -174,17 +176,22 @@ they are not part of the active next steps.
 
 ## Active Next Steps
 
-### 1. Add cache / pre-aggregation for sales summary
+### 1. Warm and schedule the sales summary cache
 
 Goal: make questions like "выручка за май по всем пиццериям" answer in seconds.
 
-Planned approach:
+Implemented foundation:
 
 - Store daily pizzeria sales summaries in a local Bridge database table.
-- Add a refresh job that can calculate missing days.
 - Let `GET /dodo/accounting/sales/summary` read from cache when available.
 - Return source metadata showing whether the answer came from cache, live Dodo
   API, or mixed mode.
+
+Remaining work:
+
+- Warm the cache for high-value historical periods.
+- Add a scheduled refresh job for yesterday / current month.
+- Decide cache freshness rules for current-day data.
 
 ### 2. Update ChatGPT agent configuration
 

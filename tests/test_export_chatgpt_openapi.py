@@ -140,7 +140,7 @@ def test_chatgpt_openapi_includes_sales_summary() -> None:
     operation = schema["paths"]["/dodo/accounting/sales/summary"]["get"]
     assert operation["operationId"] == "getDodoAccountingSalesSummary"
     parameter_names = {item["name"] for item in operation["parameters"]}
-    assert {"units", "from", "to", "maxPagesPerUnit", "concurrency"} <= parameter_names
+    assert {"units", "from", "to", "maxPagesPerUnit", "concurrency", "cacheMode"} <= parameter_names
     assert "fields" not in parameter_names
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/DodoSalesSummaryResponse"

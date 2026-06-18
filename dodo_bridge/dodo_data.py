@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
@@ -15,6 +15,7 @@ from dodo_bridge.models import ToolInvocationRequest, ToolSpec
 from dodo_bridge.pizzerias import load_pizzerias
 from dodo_bridge.policy import PolicyEngine
 from dodo_bridge.registry import ToolRegistry
+from dodo_bridge.sales_cache import SalesSummaryCache
 
 
 @dataclass(frozen=True)
@@ -124,6 +125,7 @@ SALES_SUMMARY_DEFAULT_MAX_PAGES_PER_UNIT = 100
 SALES_SUMMARY_MAX_PAGES_PER_UNIT = 200
 SALES_SUMMARY_DEFAULT_CONCURRENCY = 4
 SALES_SUMMARY_MAX_CONCURRENCY = 8
+SALES_SUMMARY_CACHE_MODES = {"auto", "refresh", "bypass"}
 
 
 class DodoDataService:
@@ -138,6 +140,7 @@ class DodoDataService:
         self.registry = registry
         self.policy = policy
         self.connector = DodoConnector(settings)
+        self.sales_cache = SalesSummaryCache(settings.audit_db_path)
 
     def list_functions(self) -> list[dict[str, Any]]:
         result = []
@@ -340,7 +343,13 @@ class DodoDataService:
         take: int | None = None,
         max_pages_per_unit: int | None = None,
         concurrency: int | None = None,
+        cache_mode: str = "auto",
     ) -> dict[str, Any]:
+        if cache_mode not in SALES_SUMMARY_CACHE_MODES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"cacheMode must be one of: {', '.join(sorted(SALES_SUMMARY_CACHE_MODES))}",
+            )
         function = FUNCTIONS["accounting_sales"]
         tool = self._allowed_tool(function, parameters, dry_run)
         unit_ids = normalize_units(str(parameters["units"])).split(",")
@@ -348,6 +357,7 @@ class DodoDataService:
         max_pages_value = _bounded_sales_summary_max_pages(max_pages_per_unit)
         concurrency_value = _bounded_sales_summary_concurrency(concurrency, len(unit_ids))
         base_params = dict(parameters)
+        days = _sales_summary_days(parameters)
 
         if dry_run:
             requests_preview = []
@@ -374,6 +384,7 @@ class DodoDataService:
                     "take": take_value,
                     "max_pages_per_unit": max_pages_value,
                     "concurrency": concurrency_value,
+                    "cache_mode": cache_mode,
                 },
                 "notes": [
                     "Live mode aggregates raw accounting sales rows by unit.",
@@ -382,8 +393,30 @@ class DodoDataService:
             }
 
         unit_names = self._unit_names_by_id()
+        cached = {}
+        daily_rows_requested = len(unit_ids) * len(days)
+        daily_rows_hit = 0
+        if cache_mode == "auto":
+            cached = self.sales_cache.fetch_daily(unit_ids=unit_ids, days=days)
+            daily_rows_hit = len(cached)
+
+        unit_results: list[dict[str, Any]] = []
+        live_unit_ids: list[str] = []
+        for unit_id in unit_ids:
+            cached_rows = [cached.get((unit_id, day)) for day in days]
+            if cache_mode == "auto" and days and all(row is not None for row in cached_rows):
+                unit_results.append(
+                    _sales_summary_bucket_from_cached_rows(
+                        unit_id=unit_id,
+                        unit_name=unit_names.get(unit_id),
+                        rows=[row for row in cached_rows if row is not None],
+                    )
+                )
+            else:
+                live_unit_ids.append(unit_id)
+
         semaphore = asyncio.Semaphore(concurrency_value)
-        unit_results = await asyncio.gather(
+        live_results = await asyncio.gather(
             *(
                 self._fetch_sales_summary_for_unit(
                     tool=tool,
@@ -394,9 +427,19 @@ class DodoDataService:
                     max_pages=max_pages_value,
                     semaphore=semaphore,
                 )
-                for unit_id in unit_ids
+                for unit_id in live_unit_ids
             )
         )
+        unit_results.extend(live_results)
+
+        cache_writes = 0
+        if cache_mode in {"auto", "refresh"}:
+            daily_rows_to_cache = []
+            for unit in live_results:
+                if not unit["source"]["truncated"]:
+                    daily_rows_to_cache.extend(unit.get("_daily", []))
+            cache_writes = self.sales_cache.upsert_daily(daily_rows_to_cache)
+
         unit_results.sort(key=lambda item: item.get("unitName") or item["unitId"])
 
         total = _new_sales_summary_bucket()
@@ -407,6 +450,7 @@ class DodoDataService:
             pages_fetched += int(unit["source"]["pagesFetched"])
             if unit["source"]["truncated"]:
                 truncated_units.append({"unitId": unit["unitId"], "unitName": unit.get("unitName")})
+            unit.pop("_daily", None)
 
         return {
             "function": "accounting_sales_summary",
@@ -426,6 +470,12 @@ class DodoDataService:
                 "maxPagesPerUnit": max_pages_value,
                 "concurrency": concurrency_value,
                 "truncatedUnits": truncated_units,
+                "cacheMode": cache_mode,
+                "dailyRowsRequested": daily_rows_requested,
+                "dailyRowsHit": daily_rows_hit,
+                "dailyRowsMissed": daily_rows_requested - daily_rows_hit,
+                "cacheWrites": cache_writes,
+                "unitsFetchedLive": live_unit_ids,
             },
             "notes": [
                 "salesWithDiscount is sum of products[].priceWithDiscount.",
@@ -667,6 +717,7 @@ class DodoDataService:
     ) -> dict[str, Any]:
         async with semaphore:
             bucket = _new_sales_summary_bucket(unit_id=unit_id, unit_name=unit_name)
+            daily_buckets: dict[str, dict[str, Any]] = {}
             rows_key: str | None = None
             pages_fetched = 0
             truncated = False
@@ -690,7 +741,7 @@ class DodoDataService:
                     )
                 rows_key = rows_key or current_key
                 pages_fetched += 1
-                _add_sales_rows_to_bucket(bucket, rows)
+                _add_sales_rows_to_bucket(bucket, rows, daily_buckets=daily_buckets)
                 if len(rows) < take:
                     break
             else:
@@ -702,6 +753,10 @@ class DodoDataService:
                 "truncated": truncated,
                 "nextSkip": pages_fetched * take if truncated else None,
             }
+            bucket["_daily"] = [
+                {"day": day, **_finalize_sales_summary_bucket(daily_bucket)}
+                for day, daily_bucket in sorted(daily_buckets.items())
+            ]
             return bucket
 
     def _unit_names_by_id(self) -> dict[str, str]:
@@ -1092,6 +1147,45 @@ def _bounded_sales_summary_concurrency(value: int | None, unit_count: int) -> in
     return max(1, min(concurrency, SALES_SUMMARY_MAX_CONCURRENCY, max(unit_count, 1)))
 
 
+def _sales_summary_days(parameters: dict[str, Any]) -> list[str]:
+    from_day = date.fromisoformat(str(parameters["from"]))
+    to_exclusive = date.fromisoformat(str(parameters["to"]))
+    days = []
+    current = from_day
+    while current < to_exclusive:
+        days.append(current.isoformat())
+        current += timedelta(days=1)
+    return days
+
+
+def _sales_summary_bucket_from_cached_rows(
+    *,
+    unit_id: str,
+    unit_name: str | None,
+    rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    bucket = _new_sales_summary_bucket(unit_id=unit_id, unit_name=unit_name)
+    refreshed_values = []
+    for row in rows:
+        if row.get("unitName"):
+            bucket["unitName"] = row["unitName"]
+        _add_sales_summary_bucket(bucket, row)
+        if row.get("refreshedAt"):
+            refreshed_values.append(str(row["refreshedAt"]))
+
+    bucket["source"] = {
+        "rowsKey": "dodo_sales_summary_daily",
+        "pagesFetched": 0,
+        "truncated": False,
+        "nextSkip": None,
+        "cache": "hit",
+        "days": len(rows),
+        "refreshedAtMin": min(refreshed_values) if refreshed_values else None,
+        "refreshedAtMax": max(refreshed_values) if refreshed_values else None,
+    }
+    return bucket
+
+
 def _new_sales_summary_bucket(
     *,
     unit_id: str | None = None,
@@ -1110,24 +1204,75 @@ def _new_sales_summary_bucket(
     return bucket
 
 
-def _add_sales_rows_to_bucket(bucket: dict[str, Any], rows: list[Any]) -> None:
+def _add_sales_rows_to_bucket(
+    bucket: dict[str, Any],
+    rows: list[Any],
+    *,
+    daily_buckets: dict[str, dict[str, Any]] | None = None,
+) -> None:
     for row in rows:
         if not isinstance(row, dict):
             continue
-        bucket["orders"] += 1
         if row.get("unitId"):
             bucket["unitId"] = row["unitId"]
         if row.get("unitName"):
             bucket["unitName"] = row["unitName"]
+
+        products_count = 0
+        sales_with_discount = 0.0
+        sales_without_discount = 0.0
         products = row.get("products")
-        if not isinstance(products, list):
+        if isinstance(products, list):
+            for product in products:
+                if not isinstance(product, dict):
+                    continue
+                products_count += 1
+                sales_with_discount += _as_float(product.get("priceWithDiscount"))
+                sales_without_discount += _as_float(product.get("price"))
+
+        _add_sales_row_metrics(
+            bucket,
+            orders=1,
+            products=products_count,
+            sales_with_discount=sales_with_discount,
+            sales_without_discount=sales_without_discount,
+        )
+
+        if daily_buckets is None:
             continue
-        for product in products:
-            if not isinstance(product, dict):
-                continue
-            bucket["products"] += 1
-            bucket["salesWithDiscount"] += _as_float(product.get("priceWithDiscount"))
-            bucket["salesWithoutDiscount"] += _as_float(product.get("price"))
+        day = _sales_row_day(row)
+        if not day:
+            continue
+        daily_bucket = daily_buckets.setdefault(
+            day,
+            _new_sales_summary_bucket(
+                unit_id=str(row.get("unitId") or bucket.get("unitId") or ""),
+                unit_name=str(row.get("unitName") or bucket.get("unitName") or "") or None,
+            ),
+        )
+        if row.get("unitName"):
+            daily_bucket["unitName"] = row["unitName"]
+        _add_sales_row_metrics(
+            daily_bucket,
+            orders=1,
+            products=products_count,
+            sales_with_discount=sales_with_discount,
+            sales_without_discount=sales_without_discount,
+        )
+
+
+def _add_sales_row_metrics(
+    bucket: dict[str, Any],
+    *,
+    orders: int,
+    products: int,
+    sales_with_discount: float,
+    sales_without_discount: float,
+) -> None:
+    bucket["orders"] += orders
+    bucket["products"] += products
+    bucket["salesWithDiscount"] += sales_with_discount
+    bucket["salesWithoutDiscount"] += sales_without_discount
 
 
 def _add_sales_summary_bucket(total: dict[str, Any], bucket: dict[str, Any]) -> None:
@@ -1135,6 +1280,18 @@ def _add_sales_summary_bucket(total: dict[str, Any], bucket: dict[str, Any]) -> 
     total["products"] += int(bucket["products"])
     total["salesWithDiscount"] += float(bucket["salesWithDiscount"])
     total["salesWithoutDiscount"] += float(bucket["salesWithoutDiscount"])
+
+
+def _sales_row_day(row: dict[str, Any]) -> str | None:
+    value = str(row.get("soldAtLocal") or row.get("soldAt") or "")
+    if len(value) < 10:
+        return None
+    day = value[:10]
+    try:
+        date.fromisoformat(day)
+    except ValueError:
+        return None
+    return day
 
 
 def _finalize_sales_summary_bucket(bucket: dict[str, Any]) -> dict[str, Any]:

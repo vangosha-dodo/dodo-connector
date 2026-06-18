@@ -236,6 +236,12 @@ async def accounting_sales_summary(
     take: int | None = Query(default=None, ge=1),
     max_pages_per_unit: int | None = Query(default=None, alias="maxPagesPerUnit", ge=1),
     concurrency: int | None = Query(default=None, ge=1, le=8),
+    cache_mode: str = Query(
+        default="auto",
+        alias="cacheMode",
+        pattern="^(auto|refresh|bypass)$",
+        description="auto uses cached daily summaries and fills misses; refresh recalculates and stores; bypass ignores cache.",
+    ),
     dry_run: bool = Query(default=False),
     context: RouteContext = Depends(),
 ) -> dict[str, Any]:
@@ -246,11 +252,12 @@ async def accounting_sales_summary(
         take=take,
         max_pages_per_unit=max_pages_per_unit,
         concurrency=concurrency,
+        cache_mode=cache_mode,
     )
     _record_dodo_audit(
         context,
         function_name="accounting_sales_summary",
-        parameters=params,
+        parameters={**params, "cacheMode": cache_mode},
         dry_run=dry_run,
         fields=None,
         take=take,
