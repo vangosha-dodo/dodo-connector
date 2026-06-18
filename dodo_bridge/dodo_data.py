@@ -425,6 +425,7 @@ class DodoDataService:
                     unit_name=unit_names.get(unit_id),
                     take=take_value,
                     max_pages=max_pages_value,
+                    days=days,
                     semaphore=semaphore,
                 )
                 for unit_id in live_unit_ids
@@ -713,6 +714,7 @@ class DodoDataService:
         unit_name: str | None,
         take: int,
         max_pages: int,
+        days: list[str],
         semaphore: asyncio.Semaphore,
     ) -> dict[str, Any]:
         async with semaphore:
@@ -753,6 +755,11 @@ class DodoDataService:
                 "truncated": truncated,
                 "nextSkip": pages_fetched * take if truncated else None,
             }
+            for day in days:
+                daily_buckets.setdefault(
+                    day,
+                    _new_sales_summary_bucket(unit_id=unit_id, unit_name=bucket.get("unitName") or unit_name),
+                )
             bucket["_daily"] = [
                 {"day": day, **_finalize_sales_summary_bucket(daily_bucket)}
                 for day, daily_bucket in sorted(daily_buckets.items())
