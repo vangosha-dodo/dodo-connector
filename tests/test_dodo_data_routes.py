@@ -100,6 +100,97 @@ def test_dodo_accounting_sales_paginates_and_projects(tmp_path, monkeypatch) -> 
     ]
 
 
+def test_dodo_accounting_sales_summary_aggregates_by_unit(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        unit = parameters["units"]
+        skip = parameters["skip"]
+        if unit == "unit-1" and skip == 0:
+            return {
+                "sales": [
+                    {
+                        "unitId": "unit-1",
+                        "unitName": "Точка 1",
+                        "products": [
+                            {"price": 100, "priceWithDiscount": 80},
+                            {"price": 50, "priceWithDiscount": 50},
+                        ],
+                    },
+                    {
+                        "unitId": "unit-1",
+                        "unitName": "Точка 1",
+                        "products": [{"price": 40, "priceWithDiscount": 30}],
+                    },
+                ]
+            }
+        if unit == "unit-2" and skip == 0:
+            return {
+                "sales": [
+                    {
+                        "unitId": "unit-2",
+                        "unitName": "Точка 2",
+                        "products": [{"price": 200, "priceWithDiscount": 180}],
+                    }
+                ]
+            }
+        return {"sales": []}
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/sales/summary",
+            params={
+                "units": "unit-1,unit-2",
+                "from": "2026-06-01",
+                "to": "2026-06-01",
+                "take": "2",
+                "maxPagesPerUnit": "3",
+                "concurrency": "2",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "accounting_sales_summary"
+    assert payload["complete"] is True
+    assert payload["total"] == {
+        "orders": 3,
+        "products": 4,
+        "salesWithDiscount": 340,
+        "salesWithoutDiscount": 390,
+        "discount": 50,
+    }
+    assert payload["units"] == [
+        {
+            "orders": 2,
+            "products": 3,
+            "salesWithDiscount": 160,
+            "salesWithoutDiscount": 190,
+            "discount": 30,
+            "unitId": "unit-1",
+            "unitName": "Точка 1",
+            "source": {"rowsKey": "sales", "pagesFetched": 2, "truncated": False, "nextSkip": None},
+        },
+        {
+            "orders": 1,
+            "products": 1,
+            "salesWithDiscount": 180,
+            "salesWithoutDiscount": 200,
+            "discount": 20,
+            "unitId": "unit-2",
+            "unitName": "Точка 2",
+            "source": {"rowsKey": "sales", "pagesFetched": 1, "truncated": False, "nextSkip": None},
+        },
+    ]
+    assert payload["source"]["rawRowsAggregated"] == 3
+    assert payload["source"]["pagesFetched"] == 3
+
+
 def test_dodo_accounting_writeoffs_products_dry_run_uses_exclusive_to_date(tmp_path) -> None:
     settings = make_settings(tmp_path)
     app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
@@ -414,6 +505,35 @@ def test_dodo_data_external_http_error_returns_controlled_response(tmp_path, mon
     assert detail["external_code"] == "ValidationError"
     assert detail["external_message"] == "Bad query"
     assert detail["external_details"]["errors"][0]["message"] == "From should be less than To."
+
+
+def test_dodo_data_external_timeout_returns_gateway_timeout(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, parameters, dry_run
+        raise httpx.ReadTimeout("Dodo API was too slow")
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/sales",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-16",
+                "to": "2026-06-16",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 504
+    detail = response.json()["detail"]
+    assert detail["error"] == "external_timeout"
+    assert detail["tool_name"] == "dodo_accounting_sales"
+    assert detail["exception"] == "ReadTimeout"
+    assert "Split the request" in detail["hint"]
 
 
 def test_dodo_accounting_inventory_stocks_dry_run(tmp_path) -> None:

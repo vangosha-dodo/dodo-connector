@@ -228,6 +228,38 @@ async def accounting_sales(
     )
 
 
+@router.get("/accounting/sales/summary")
+async def accounting_sales_summary(
+    units: str = Query(..., description="Comma-separated Dodo unit ids."),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    take: int | None = Query(default=None, ge=1),
+    max_pages_per_unit: int | None = Query(default=None, alias="maxPagesPerUnit", ge=1),
+    concurrency: int | None = Query(default=None, ge=1, le=8),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
+    result = await context.service.fetch_sales_summary(
+        parameters=params,
+        dry_run=dry_run,
+        take=take,
+        max_pages_per_unit=max_pages_per_unit,
+        concurrency=concurrency,
+    )
+    _record_dodo_audit(
+        context,
+        function_name="accounting_sales_summary",
+        parameters=params,
+        dry_run=dry_run,
+        fields=None,
+        take=take,
+        max_pages=max_pages_per_unit,
+        result=result,
+    )
+    return result
+
+
 @router.get("/accounting/writeoffs/products")
 async def accounting_writeoffs_products(
     units: str = Query(..., description="Comma-separated Dodo unit ids."),

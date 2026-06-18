@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from datetime import date
@@ -11,6 +12,7 @@ from fastapi import HTTPException
 from dodo_bridge.config import Settings
 from dodo_bridge.connectors.dodo import DodoConnector
 from dodo_bridge.models import ToolInvocationRequest, ToolSpec
+from dodo_bridge.pizzerias import load_pizzerias
 from dodo_bridge.policy import PolicyEngine
 from dodo_bridge.registry import ToolRegistry
 
@@ -117,6 +119,11 @@ WRITEOFF_PRODUCT_SUMMARY_FIELDS = [
     "pricePerPiece",
     "reason",
 ]
+
+SALES_SUMMARY_DEFAULT_MAX_PAGES_PER_UNIT = 100
+SALES_SUMMARY_MAX_PAGES_PER_UNIT = 200
+SALES_SUMMARY_DEFAULT_CONCURRENCY = 4
+SALES_SUMMARY_MAX_CONCURRENCY = 8
 
 
 class DodoDataService:
@@ -325,6 +332,109 @@ class DodoDataService:
             **summary,
         }
 
+    async def fetch_sales_summary(
+        self,
+        *,
+        parameters: dict[str, Any],
+        dry_run: bool,
+        take: int | None = None,
+        max_pages_per_unit: int | None = None,
+        concurrency: int | None = None,
+    ) -> dict[str, Any]:
+        function = FUNCTIONS["accounting_sales"]
+        tool = self._allowed_tool(function, parameters, dry_run)
+        unit_ids = normalize_units(str(parameters["units"])).split(",")
+        take_value = self._bounded_take(take or self.settings.dodo_data_max_take)
+        max_pages_value = _bounded_sales_summary_max_pages(max_pages_per_unit)
+        concurrency_value = _bounded_sales_summary_concurrency(concurrency, len(unit_ids))
+        base_params = dict(parameters)
+
+        if dry_run:
+            requests_preview = []
+            for unit_id in unit_ids[:10]:
+                request_params = {
+                    **base_params,
+                    "units": unit_id,
+                    "skip": 0,
+                    "take": take_value,
+                }
+                requests_preview.append(
+                    {
+                        "unitId": unit_id,
+                        "request": self.connector.build_request(tool, request_params),
+                    }
+                )
+            return {
+                "function": "accounting_sales_summary",
+                "tool_name": tool.name,
+                "dry_run": True,
+                "request_count": len(unit_ids),
+                "requests_preview": requests_preview,
+                "pagination": {
+                    "take": take_value,
+                    "max_pages_per_unit": max_pages_value,
+                    "concurrency": concurrency_value,
+                },
+                "notes": [
+                    "Live mode aggregates raw accounting sales rows by unit.",
+                    "salesWithDiscount is sum of products[].priceWithDiscount.",
+                ],
+            }
+
+        unit_names = self._unit_names_by_id()
+        semaphore = asyncio.Semaphore(concurrency_value)
+        unit_results = await asyncio.gather(
+            *(
+                self._fetch_sales_summary_for_unit(
+                    tool=tool,
+                    base_params=base_params,
+                    unit_id=unit_id,
+                    unit_name=unit_names.get(unit_id),
+                    take=take_value,
+                    max_pages=max_pages_value,
+                    semaphore=semaphore,
+                )
+                for unit_id in unit_ids
+            )
+        )
+        unit_results.sort(key=lambda item: item.get("unitName") or item["unitId"])
+
+        total = _new_sales_summary_bucket()
+        pages_fetched = 0
+        truncated_units = []
+        for unit in unit_results:
+            _add_sales_summary_bucket(total, unit)
+            pages_fetched += int(unit["source"]["pagesFetched"])
+            if unit["source"]["truncated"]:
+                truncated_units.append({"unitId": unit["unitId"], "unitName": unit.get("unitName")})
+
+        return {
+            "function": "accounting_sales_summary",
+            "tool_name": tool.name,
+            "period": {
+                "from": str(parameters.get("from")),
+                "to": str(parameters.get("to")),
+                "to_is_exclusive": True,
+            },
+            "complete": not truncated_units,
+            "total": _finalize_sales_summary_bucket(total),
+            "units": [_finalize_sales_summary_bucket(unit) for unit in unit_results],
+            "source": {
+                "rawRowsAggregated": int(total["orders"]),
+                "pagesFetched": pages_fetched,
+                "take": take_value,
+                "maxPagesPerUnit": max_pages_value,
+                "concurrency": concurrency_value,
+                "truncatedUnits": truncated_units,
+            },
+            "notes": [
+                "salesWithDiscount is sum of products[].priceWithDiscount.",
+                "salesWithoutDiscount is sum of products[].price.",
+                "discount is salesWithoutDiscount - salesWithDiscount.",
+                "Cancelled sales are not included; they are exposed by a separate Dodo API endpoint.",
+            ],
+        }
+
     async def fetch_slice_writeoff_rate(
         self,
         *,
@@ -525,6 +635,82 @@ class DodoDataService:
                 status_code=502,
                 detail=external_http_error_detail(exc, tool.name),
             ) from exc
+        except httpx.TimeoutException as exc:
+            raise HTTPException(
+                status_code=504,
+                detail=external_request_error_detail(
+                    exc,
+                    tool.name,
+                    error="external_timeout",
+                    hint=(
+                        "Dodo API did not respond before the bridge timeout. "
+                        "Split the request by unit or period, or use a compact summary endpoint."
+                    ),
+                ),
+            ) from exc
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=external_request_error_detail(exc, tool.name, error="external_request_error"),
+            ) from exc
+
+    async def _fetch_sales_summary_for_unit(
+        self,
+        *,
+        tool: ToolSpec,
+        base_params: dict[str, Any],
+        unit_id: str,
+        unit_name: str | None,
+        take: int,
+        max_pages: int,
+        semaphore: asyncio.Semaphore,
+    ) -> dict[str, Any]:
+        async with semaphore:
+            bucket = _new_sales_summary_bucket(unit_id=unit_id, unit_name=unit_name)
+            rows_key: str | None = None
+            pages_fetched = 0
+            truncated = False
+            for page in range(max_pages):
+                page_params = {
+                    **base_params,
+                    "units": unit_id,
+                    "skip": page * take,
+                    "take": take,
+                }
+                payload = await self._invoke_tool(tool, page_params)
+                current_key, rows = extract_rows(payload, FUNCTIONS["accounting_sales"].row_keys)
+                if rows is None:
+                    raise HTTPException(
+                        status_code=502,
+                        detail={
+                            "error": "unexpected_external_response",
+                            "tool_name": tool.name,
+                            "unitId": unit_id,
+                        },
+                    )
+                rows_key = rows_key or current_key
+                pages_fetched += 1
+                _add_sales_rows_to_bucket(bucket, rows)
+                if len(rows) < take:
+                    break
+            else:
+                truncated = True
+
+            bucket["source"] = {
+                "rowsKey": rows_key,
+                "pagesFetched": pages_fetched,
+                "truncated": truncated,
+                "nextSkip": pages_fetched * take if truncated else None,
+            }
+            return bucket
+
+    def _unit_names_by_id(self) -> dict[str, str]:
+        pizzerias = load_pizzerias(self.settings.dodo_pizzerias_path).get("pizzerias", [])
+        return {
+            str(item.get("unit_id")): str(item.get("name"))
+            for item in pizzerias
+            if item.get("unit_id") and item.get("name")
+        }
 
 
 def normalize_units(units: str) -> str:
@@ -896,6 +1082,80 @@ def _round_metric(value: float) -> int | float:
     return rounded
 
 
+def _bounded_sales_summary_max_pages(value: int | None) -> int:
+    pages = value or SALES_SUMMARY_DEFAULT_MAX_PAGES_PER_UNIT
+    return max(1, min(pages, SALES_SUMMARY_MAX_PAGES_PER_UNIT))
+
+
+def _bounded_sales_summary_concurrency(value: int | None, unit_count: int) -> int:
+    concurrency = value or SALES_SUMMARY_DEFAULT_CONCURRENCY
+    return max(1, min(concurrency, SALES_SUMMARY_MAX_CONCURRENCY, max(unit_count, 1)))
+
+
+def _new_sales_summary_bucket(
+    *,
+    unit_id: str | None = None,
+    unit_name: str | None = None,
+) -> dict[str, Any]:
+    bucket: dict[str, Any] = {
+        "orders": 0,
+        "products": 0,
+        "salesWithDiscount": 0.0,
+        "salesWithoutDiscount": 0.0,
+    }
+    if unit_id is not None:
+        bucket["unitId"] = unit_id
+    if unit_name is not None:
+        bucket["unitName"] = unit_name
+    return bucket
+
+
+def _add_sales_rows_to_bucket(bucket: dict[str, Any], rows: list[Any]) -> None:
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        bucket["orders"] += 1
+        if row.get("unitId"):
+            bucket["unitId"] = row["unitId"]
+        if row.get("unitName"):
+            bucket["unitName"] = row["unitName"]
+        products = row.get("products")
+        if not isinstance(products, list):
+            continue
+        for product in products:
+            if not isinstance(product, dict):
+                continue
+            bucket["products"] += 1
+            bucket["salesWithDiscount"] += _as_float(product.get("priceWithDiscount"))
+            bucket["salesWithoutDiscount"] += _as_float(product.get("price"))
+
+
+def _add_sales_summary_bucket(total: dict[str, Any], bucket: dict[str, Any]) -> None:
+    total["orders"] += int(bucket["orders"])
+    total["products"] += int(bucket["products"])
+    total["salesWithDiscount"] += float(bucket["salesWithDiscount"])
+    total["salesWithoutDiscount"] += float(bucket["salesWithoutDiscount"])
+
+
+def _finalize_sales_summary_bucket(bucket: dict[str, Any]) -> dict[str, Any]:
+    result = {
+        "orders": int(bucket["orders"]),
+        "products": int(bucket["products"]),
+        "salesWithDiscount": _round_metric(float(bucket["salesWithDiscount"])),
+        "salesWithoutDiscount": _round_metric(float(bucket["salesWithoutDiscount"])),
+        "discount": _round_metric(
+            float(bucket["salesWithoutDiscount"]) - float(bucket["salesWithDiscount"])
+        ),
+    }
+    if "unitId" in bucket:
+        result["unitId"] = bucket["unitId"]
+    if "unitName" in bucket:
+        result["unitName"] = bucket["unitName"]
+    if "source" in bucket:
+        result["source"] = bucket["source"]
+    return result
+
+
 def external_http_error_detail(exc: httpx.HTTPStatusError, tool_name: str) -> dict[str, Any]:
     response = exc.response
     detail: dict[str, Any] = {
@@ -921,6 +1181,23 @@ def external_http_error_detail(exc: httpx.HTTPStatusError, tool_name: str) -> di
     elif payload:
         detail["external_body_preview"] = str(payload)[:500]
 
+    return detail
+
+
+def external_request_error_detail(
+    exc: httpx.RequestError,
+    tool_name: str,
+    *,
+    error: str,
+    hint: str | None = None,
+) -> dict[str, Any]:
+    detail: dict[str, Any] = {
+        "error": error,
+        "tool_name": tool_name,
+        "exception": exc.__class__.__name__,
+    }
+    if hint:
+        detail["hint"] = hint
     return detail
 
 

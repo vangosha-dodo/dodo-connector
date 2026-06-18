@@ -113,6 +113,27 @@ GET /dodopizza/{country}/accounting/sales
 The Bridge accepts `to` as an inclusive user date and sends Dodo IS an exclusive
 upper bound for this endpoint.
 
+### Accounting Sales Summary
+
+```http
+GET /dodo/accounting/sales/summary?units=<unit-id>&from=2026-06-01&to=2026-06-30
+```
+
+Uses the same Dodo IS read-only accounting sales endpoint, but aggregates rows
+inside the Bridge and returns compact revenue totals by pizzeria instead of raw
+check rows. Prefer this endpoint for ChatGPT requests like "выручка по всем
+пиццериям за месяц".
+
+Metrics:
+
+- `salesWithDiscount` - sum of `products[].priceWithDiscount`.
+- `salesWithoutDiscount` - sum of `products[].price`.
+- `discount` - `salesWithoutDiscount - salesWithDiscount`.
+- `orders` - number of accounting sales rows aggregated.
+
+For large periods, the endpoint fetches Dodo pages per pizzeria in parallel.
+If `complete=false`, increase `maxPagesPerUnit` or split the period.
+
 ### Product Write-offs
 
 ```http

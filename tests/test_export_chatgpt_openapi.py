@@ -21,6 +21,7 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
         "/dodo/staff/vacancies/count",
         "/dodo/delivery/statistics",
         "/dodo/accounting/sales",
+        "/dodo/accounting/sales/summary",
         "/dodo/accounting/writeoffs/products",
         "/dodo/accounting/writeoffs/products/summary",
         "/dodo/accounting/slices/writeoff-rate",
@@ -131,6 +132,20 @@ def test_chatgpt_openapi_includes_inventory_stocks() -> None:
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/DodoDataResponse"
     }
+
+
+def test_chatgpt_openapi_includes_sales_summary() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    operation = schema["paths"]["/dodo/accounting/sales/summary"]["get"]
+    assert operation["operationId"] == "getDodoAccountingSalesSummary"
+    parameter_names = {item["name"] for item in operation["parameters"]}
+    assert {"units", "from", "to", "maxPagesPerUnit", "concurrency"} <= parameter_names
+    assert "fields" not in parameter_names
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/DodoSalesSummaryResponse"
+    }
+    assert "DodoSalesSummaryUnit" in schema["components"]["schemas"]
 
 
 def test_chatgpt_openapi_includes_product_writeoff_summary() -> None:

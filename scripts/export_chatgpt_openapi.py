@@ -68,6 +68,34 @@ PAGINATION_PARAMETERS: list[dict[str, Any]] = [
     },
 ]
 
+SALES_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
+    COMMON_PERIOD_PARAMETERS[:3]
+    + [
+        COMMON_PERIOD_PARAMETERS[4],
+        {
+            "name": "take",
+            "in": "query",
+            "required": False,
+            "description": "Page size for raw accounting sales pages used internally for aggregation.",
+            "schema": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 1000},
+        },
+        {
+            "name": "maxPagesPerUnit",
+            "in": "query",
+            "required": False,
+            "description": "Safety cap for pages fetched per pizzeria. Increase only when complete=false.",
+            "schema": {"type": "integer", "minimum": 1, "maximum": 200, "default": 100},
+        },
+        {
+            "name": "concurrency",
+            "in": "query",
+            "required": False,
+            "description": "How many pizzerias the Bridge may aggregate in parallel.",
+            "schema": {"type": "integer", "minimum": 1, "maximum": 8, "default": 4},
+        },
+    ]
+)
+
 RATINGS_PARAMETERS: list[dict[str, Any]] = [
     {
         "name": "units",
@@ -433,9 +461,30 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "get": {
                     "operationId": "getDodoAccountingSales",
                     "summary": "Get accounting sales",
-                    "description": "Read Dodo IS accounting sales rows for selected units and period.",
+                    "description": (
+                        "Read raw Dodo IS accounting sales rows for selected units and period. "
+                        "Do not use this for broad revenue questions across many pizzerias or a full month; "
+                        "use getDodoAccountingSalesSummary instead."
+                    ),
                     "parameters": COMMON_PERIOD_PARAMETERS + PAGINATION_PARAMETERS,
                     "responses": data_response("Accounting sales rows."),
+                }
+            },
+            "/dodo/accounting/sales/summary": {
+                "get": {
+                    "operationId": "getDodoAccountingSalesSummary",
+                    "summary": "Get compact sales revenue summary",
+                    "description": (
+                        "Aggregate Dodo IS accounting sales into compact revenue totals by pizzeria. "
+                        "Use this endpoint for questions like 'выручка по всем пиццериям за месяц'. "
+                        "The Bridge remains read-only and computes salesWithDiscount from "
+                        "products[].priceWithDiscount without returning raw check rows."
+                    ),
+                    "parameters": SALES_SUMMARY_PARAMETERS,
+                    "responses": successful_response(
+                        "Aggregated accounting sales revenue summary.",
+                        "#/components/schemas/DodoSalesSummaryResponse",
+                    ),
                 }
             },
             "/dodo/accounting/writeoffs/products": {
@@ -543,6 +592,10 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "MissingCapabilityPeriod": missing_capability_period_schema(),
                 "MissingCapabilityResponse": missing_capability_response_schema(),
                 "DodoDataResponse": dodo_data_response_schema(),
+                "DodoSalesSummaryResponse": dodo_sales_summary_response_schema(),
+                "DodoSalesSummaryTotal": dodo_sales_summary_total_schema(),
+                "DodoSalesSummaryUnit": dodo_sales_summary_unit_schema(),
+                "DodoSalesSummarySource": dodo_sales_summary_source_schema(),
                 "DodoWriteoffSummaryResponse": dodo_writeoff_summary_response_schema(),
                 "DodoWriteoffSummarySource": dodo_writeoff_summary_source_schema(),
                 "DodoWriteoffSummaryFilter": dodo_writeoff_summary_filter_schema(),
@@ -819,6 +872,107 @@ def dodo_data_response_schema() -> dict[str, Any]:
             },
         },
         "required": ["function", "tool_name"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_summary_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Compact read-only accounting sales revenue aggregation by pizzeria.",
+        "properties": {
+            "function": {"type": "string"},
+            "tool_name": {"type": "string"},
+            "dry_run": {"type": "boolean"},
+            "request_count": {"type": "integer"},
+            "requests_preview": {
+                "type": "array",
+                "items": {"type": "object", "additionalProperties": True},
+            },
+            "pagination": {"$ref": "#/components/schemas/DodoPagination"},
+            "period": {
+                "type": "object",
+                "properties": {
+                    "from": {"type": "string", "format": "date"},
+                    "to": {"type": "string", "format": "date"},
+                    "to_is_exclusive": {"type": "boolean"},
+                },
+                "additionalProperties": False,
+            },
+            "complete": {
+                "type": "boolean",
+                "description": "False when one or more pizzerias hit maxPagesPerUnit.",
+            },
+            "total": {"$ref": "#/components/schemas/DodoSalesSummaryTotal"},
+            "units": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoSalesSummaryUnit"},
+            },
+            "source": {"$ref": "#/components/schemas/DodoSalesSummarySource"},
+            "notes": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["function", "tool_name"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_summary_total_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "orders": {"type": "integer"},
+            "products": {"type": "integer"},
+            "salesWithDiscount": {"type": "number"},
+            "salesWithoutDiscount": {"type": "number"},
+            "discount": {"type": "number"},
+        },
+        "required": ["orders", "products", "salesWithDiscount", "salesWithoutDiscount", "discount"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_summary_unit_schema() -> dict[str, Any]:
+    schema = dodo_sales_summary_total_schema()
+    schema["properties"] = {
+        **schema["properties"],
+        "unitId": {"type": "string"},
+        "unitName": {"type": "string"},
+        "source": {
+            "type": "object",
+            "properties": {
+                "rowsKey": {"type": "string"},
+                "pagesFetched": {"type": "integer"},
+                "truncated": {"type": "boolean"},
+                "nextSkip": {"type": "integer"},
+            },
+            "additionalProperties": False,
+        },
+    }
+    schema["required"] = [*schema["required"], "unitId"]
+    return schema
+
+
+def dodo_sales_summary_source_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "rawRowsAggregated": {"type": "integer"},
+            "pagesFetched": {"type": "integer"},
+            "take": {"type": "integer"},
+            "maxPagesPerUnit": {"type": "integer"},
+            "concurrency": {"type": "integer"},
+            "truncatedUnits": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "unitId": {"type": "string"},
+                        "unitName": {"type": "string"},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+        },
         "additionalProperties": False,
     }
 
