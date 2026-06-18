@@ -186,10 +186,12 @@ Implemented foundation:
 - Let `GET /dodo/accounting/sales/summary` read from cache when available.
 - Return source metadata showing whether the answer came from cache, live Dodo
   API, or mixed mode.
+- Add `scripts/refresh_sales_summary_cache.py` for manual or scheduled cache
+  refresh by preset (`yesterday`, `current-month`, `previous-month`) or explicit
+  period.
 
 Remaining work:
 
-- Warm the cache for high-value historical periods.
 - Add a scheduled refresh job for yesterday / current month.
 - Decide cache freshness rules for current-day data.
 
