@@ -189,10 +189,12 @@ Implemented foundation:
 - Add `scripts/refresh_sales_summary_cache.py` for manual or scheduled cache
   refresh by preset (`yesterday`, `current-month`, `previous-month`) or explicit
   period.
+- Add systemd units:
+  - `deploy/systemd/dodo-sales-cache-refresh.service`
+  - `deploy/systemd/dodo-sales-cache-refresh.timer`
 
 Remaining work:
 
-- Add a scheduled refresh job for yesterday / current month.
 - Decide cache freshness rules for current-day data.
 
 ### 2. Update ChatGPT agent configuration
