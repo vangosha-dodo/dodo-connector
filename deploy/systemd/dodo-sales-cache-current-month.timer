@@ -1,0 +1,10 @@
+[Unit]
+Description=Warm Dodo Bridge current-month sales summary cache daily
+
+[Timer]
+OnCalendar=*-*-* 00:45:00
+Persistent=true
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target

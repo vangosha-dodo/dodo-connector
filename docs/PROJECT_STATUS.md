@@ -94,12 +94,15 @@ answers instead of huge raw Dodo rows.
 - Product write-off summary:
   - `GET /dodo/accounting/writeoffs/products/summary`
   - For questions like "списания кусочков по всем пиццериям".
+  - `units` is optional; when omitted, Bridge uses all configured pizzerias.
 - Slice write-off rate:
   - `GET /dodo/accounting/slices/writeoff-rate`
   - Computes write-offs as a percent of laid-out quantity.
+  - `units` is optional; when omitted, Bridge uses all configured pizzerias.
 - Sales revenue summary:
   - `GET /dodo/accounting/sales/summary`
   - For questions like "выручка по всем пиццериям за май 2026".
+  - `units` is optional; when omitted, Bridge uses all configured pizzerias.
   - `salesWithDiscount` is computed from `products[].priceWithDiscount`.
   - `salesWithoutDiscount` is computed from `products[].price`.
   - `averageCheck` is computed as `salesWithDiscount / orders`.
@@ -107,6 +110,7 @@ answers instead of huge raw Dodo rows.
 - Sales revenue comparison:
   - `GET /dodo/accounting/sales/comparison`
   - Compares current and baseline periods.
+  - `units` is optional; when omitted, Bridge uses all configured pizzerias.
   - Returns current, baseline, absolute change, percent change, and per-pizzeria
     deltas.
   - Uses the same read-only sales source and cache behavior as sales summary.
@@ -222,6 +226,16 @@ Implemented foundation:
 - Add systemd units:
   - `deploy/systemd/dodo-sales-cache-refresh.service`
   - `deploy/systemd/dodo-sales-cache-refresh.timer`
+- Add current-month cache warmup units:
+  - `deploy/systemd/dodo-sales-cache-current-month.service`
+  - `deploy/systemd/dodo-sales-cache-current-month.timer`
+  - Uses `cacheMode=auto` so it backfills cache gaps without forcing a full
+    recalculation when the daily cache is already warm.
+
+Verified cache coverage:
+
+- May 2026: fully cached for all 16 pizzerias.
+- June 1-18, 2026: fully cached for all 16 pizzerias.
 
 Remaining work:
 

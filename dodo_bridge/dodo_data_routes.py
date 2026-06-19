@@ -230,7 +230,10 @@ async def accounting_sales(
 
 @router.get("/accounting/sales/summary")
 async def accounting_sales_summary(
-    units: str = Query(..., description="Comma-separated Dodo unit ids."),
+    units: str | None = Query(
+        default=None,
+        description="Optional comma-separated Dodo unit ids. Omit for all configured pizzerias.",
+    ),
     from_date: date = Query(..., alias="from"),
     to_date: date = Query(..., alias="to"),
     take: int | None = Query(default=None, ge=1),
@@ -245,7 +248,13 @@ async def accounting_sales_summary(
     dry_run: bool = Query(default=False),
     context: RouteContext = Depends(),
 ) -> dict[str, Any]:
-    params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
+    params = _period_params(
+        context.settings,
+        _units_or_all_pizzerias(context.settings, units),
+        from_date,
+        to_date,
+        exclusive_to=True,
+    )
     result = await context.service.fetch_sales_summary(
         parameters=params,
         dry_run=dry_run,
@@ -269,7 +278,10 @@ async def accounting_sales_summary(
 
 @router.get("/accounting/sales/comparison")
 async def accounting_sales_comparison(
-    units: str = Query(..., description="Comma-separated Dodo unit ids."),
+    units: str | None = Query(
+        default=None,
+        description="Optional comma-separated Dodo unit ids. Omit for all configured pizzerias.",
+    ),
     from_date: date = Query(..., alias="from"),
     to_date: date = Query(..., alias="to"),
     compare_from_date: date = Query(..., alias="compareFrom"),
@@ -286,10 +298,11 @@ async def accounting_sales_comparison(
     dry_run: bool = Query(default=False),
     context: RouteContext = Depends(),
 ) -> dict[str, Any]:
-    current_params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
+    resolved_units = _units_or_all_pizzerias(context.settings, units)
+    current_params = _period_params(context.settings, resolved_units, from_date, to_date, exclusive_to=True)
     baseline_params = _period_params(
         context.settings,
-        units,
+        resolved_units,
         compare_from_date,
         compare_to_date,
         exclusive_to=True,
@@ -346,7 +359,10 @@ async def accounting_writeoffs_products(
 
 @router.get("/accounting/writeoffs/products/summary")
 async def accounting_writeoffs_products_summary(
-    units: str = Query(..., description="Comma-separated Dodo unit ids."),
+    units: str | None = Query(
+        default=None,
+        description="Optional comma-separated Dodo unit ids. Omit for all configured pizzerias.",
+    ),
     from_date: date = Query(..., alias="from"),
     to_date: date = Query(..., alias="to"),
     product_name_prefix: str = Query(
@@ -369,7 +385,13 @@ async def accounting_writeoffs_products_summary(
     dry_run: bool = Query(default=False),
     context: RouteContext = Depends(),
 ) -> dict[str, Any]:
-    params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
+    params = _period_params(
+        context.settings,
+        _units_or_all_pizzerias(context.settings, units),
+        from_date,
+        to_date,
+        exclusive_to=True,
+    )
     result = await context.service.fetch_writeoff_products_summary(
         parameters=params,
         dry_run=dry_run,
@@ -399,7 +421,10 @@ async def accounting_writeoffs_products_summary(
 
 @router.get("/accounting/slices/writeoff-rate")
 async def accounting_slices_writeoff_rate(
-    units: str = Query(..., description="Comma-separated Dodo unit ids."),
+    units: str | None = Query(
+        default=None,
+        description="Optional comma-separated Dodo unit ids. Omit for all configured pizzerias.",
+    ),
     from_date: date = Query(..., alias="from"),
     to_date: date = Query(..., alias="to"),
     product_name_prefix: str = Query(
@@ -417,8 +442,9 @@ async def accounting_slices_writeoff_rate(
     dry_run: bool = Query(default=False),
     context: RouteContext = Depends(),
 ) -> dict[str, Any]:
-    sales_params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
-    writeoff_params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
+    resolved_units = _units_or_all_pizzerias(context.settings, units)
+    sales_params = _period_params(context.settings, resolved_units, from_date, to_date, exclusive_to=True)
+    writeoff_params = _period_params(context.settings, resolved_units, from_date, to_date, exclusive_to=True)
     take_value = take or context.settings.dodo_data_max_take
     max_pages_value = max_pages or context.settings.dodo_data_max_pages
     result = await context.service.fetch_slice_writeoff_rate(
@@ -584,6 +610,17 @@ def _period_params(
         "from": from_date.isoformat(),
         "to": api_to_date.isoformat(),
     }
+
+
+def _units_or_all_pizzerias(settings: Settings, units: str | None) -> str:
+    if units:
+        return normalize_units(units)
+
+    pizzerias = load_pizzerias(settings.dodo_pizzerias_path).get("pizzerias", [])
+    unit_ids = [str(item["unit_id"]) for item in pizzerias if item.get("unit_id")]
+    if not unit_ids:
+        raise HTTPException(status_code=422, detail="Provide 'units' or configure DODO_PIZZERIAS_PATH")
+    return ",".join(unit_ids)
 
 
 def _ratings_params(*, units: str | None, country_code: int | None) -> dict[str, Any]:

@@ -51,6 +51,14 @@ COMMON_PERIOD_PARAMETERS: list[dict[str, Any]] = [
     },
 ]
 
+COMPACT_UNITS_PARAMETER: dict[str, Any] = {
+    "name": "units",
+    "in": "query",
+    "required": False,
+    "description": "Optional comma-separated Dodo unit ids. Omit for all configured pizzerias.",
+    "schema": {"type": "string"},
+}
+
 PAGINATION_PARAMETERS: list[dict[str, Any]] = [
     {
         "name": "take",
@@ -69,7 +77,7 @@ PAGINATION_PARAMETERS: list[dict[str, Any]] = [
 ]
 
 SALES_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
-    COMMON_PERIOD_PARAMETERS[:3]
+    [COMPACT_UNITS_PARAMETER, *COMMON_PERIOD_PARAMETERS[1:3]]
     + [
         COMMON_PERIOD_PARAMETERS[4],
         {
@@ -104,7 +112,7 @@ SALES_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
 )
 
 SALES_COMPARISON_PARAMETERS: list[dict[str, Any]] = (
-    COMMON_PERIOD_PARAMETERS[:3]
+    [COMPACT_UNITS_PARAMETER, *COMMON_PERIOD_PARAMETERS[1:3]]
     + [
         {
             "name": "compareFrom",
@@ -233,7 +241,7 @@ OPTIONAL_UNIT_COUNTRY_PARAMETERS: list[dict[str, Any]] = [
 ]
 
 WRITEOFF_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
-    COMMON_PERIOD_PARAMETERS[:3]
+    [COMPACT_UNITS_PARAMETER, *COMMON_PERIOD_PARAMETERS[1:3]]
     + [
         {
             "name": "productNamePrefix",
@@ -262,7 +270,7 @@ WRITEOFF_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
 )
 
 SLICE_WRITEOFF_RATE_PARAMETERS: list[dict[str, Any]] = (
-    COMMON_PERIOD_PARAMETERS[:3]
+    [COMPACT_UNITS_PARAMETER, *COMMON_PERIOD_PARAMETERS[1:3]]
     + [
         {
             "name": "productNamePrefix",

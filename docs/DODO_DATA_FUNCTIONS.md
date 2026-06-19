@@ -124,6 +124,9 @@ inside the Bridge and returns compact revenue totals by pizzeria instead of raw
 check rows. Prefer this endpoint for ChatGPT requests like "выручка по всем
 пиццериям за месяц".
 
+For all configured pizzerias, omit `units`. Provide `units` only when the user
+asks for specific pizzerias.
+
 Metrics:
 
 - `salesWithDiscount` - sum of `products[].priceWithDiscount`.
@@ -165,13 +168,16 @@ to Dodo IS with an exclusive upper bound, so a one-day request like
 ### Product Write-offs Summary
 
 ```http
-GET /dodo/accounting/writeoffs/products/summary?units=<unit-id>&from=2026-06-01&to=2026-06-02&productNamePrefix=Кус
+GET /dodo/accounting/writeoffs/products/summary?from=2026-06-01&to=2026-06-02&productNamePrefix=Кус
 ```
 
 Uses the same Dodo IS read-only product write-off endpoint, then aggregates
 inside the Bridge by pizzeria. Prefer this endpoint for broad ChatGPT requests
 like "списания кусочков по всем пиццериям", because it returns compact totals
 instead of raw rows and avoids `ResponseTooLargeError`.
+
+For specific pizzerias, pass `units=<unit-id>`. Without `units`, the Bridge uses
+the configured pizzeria catalog.
 
 Optional flags:
 
@@ -181,7 +187,7 @@ Optional flags:
 ### Slice Write-off Rate
 
 ```http
-GET /dodo/accounting/slices/writeoff-rate?units=<unit-id>&from=2026-06-01&to=2026-06-02&productNamePrefix=Кус
+GET /dodo/accounting/slices/writeoff-rate?from=2026-06-01&to=2026-06-02&productNamePrefix=Кус
 ```
 
 Uses read-only Dodo IS product write-offs plus accounting sales. The Bridge
@@ -195,6 +201,9 @@ writeoffPercent = writeoffQuantity / laidOutQuantity * 100
 Use this for questions like "списания кусочков в процентах от выложенного
 количества". The endpoint returns compact totals by pizzeria and does not
 return raw sales or write-off rows.
+
+For all configured pizzerias, omit `units`. For a narrowed report, pass
+`units=<unit-id>`.
 
 Optional flag:
 

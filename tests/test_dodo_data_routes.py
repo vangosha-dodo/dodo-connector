@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import httpx
@@ -260,6 +261,62 @@ def test_dodo_accounting_sales_summary_uses_cache_on_second_call(tmp_path, monke
     assert second_payload["source"]["unitsFetchedLive"] == []
     assert second_payload["units"][0]["source"]["cache"] == "hit"
     assert calls == [("unit-1", 0)]
+
+
+def test_dodo_accounting_sales_summary_defaults_to_all_pizzerias(tmp_path, monkeypatch) -> None:
+    pizzerias_path = tmp_path / "pizzerias.json"
+    pizzerias_path.write_text(
+        json.dumps(
+            [
+                {"id": "unit-1", "name": "Точка 1", "unitType": 1},
+                {"id": "unit-2", "name": "Точка 2", "unitType": 1},
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    calls = []
+
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        calls.append((parameters["units"], parameters["skip"]))
+        if parameters["skip"] != 0:
+            return {"sales": []}
+        return {
+            "sales": [
+                {
+                    "soldAtLocal": "2026-06-01T10:00:00",
+                    "unitId": parameters["units"],
+                    "unitName": f"Name {parameters['units']}",
+                    "products": [{"price": 100, "priceWithDiscount": 90}],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token", dodo_pizzerias_path=pizzerias_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/sales/summary",
+            params={
+                "from": "2026-06-01",
+                "to": "2026-06-01",
+                "take": "10",
+                "cacheMode": "bypass",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"]["salesWithDiscount"] == 180
+    assert payload["source"]["dailyRowsRequested"] == 2
+    assert payload["source"]["unitsFetchedLive"] == ["unit-1", "unit-2"]
+    assert {unit["unitId"] for unit in payload["units"]} == {"unit-1", "unit-2"}
+    assert calls == [("unit-1", 0), ("unit-2", 0)]
 
 
 def test_dodo_accounting_sales_summary_caches_zero_sales_days(tmp_path, monkeypatch) -> None:
@@ -1163,6 +1220,7 @@ def make_settings(
     tmp_path: Path,
     dodo_access_token: str | None = None,
     dodo_data_max_period_days: int = 92,
+    dodo_pizzerias_path: Path | None = None,
 ) -> Settings:
     return Settings(
         api_keys=[],
@@ -1171,5 +1229,5 @@ def make_settings(
         audit_db_path=tmp_path / "audit.sqlite3",
         dodo_access_token=dodo_access_token,
         dodo_data_max_period_days=dodo_data_max_period_days,
-        dodo_pizzerias_path=None,
+        dodo_pizzerias_path=dodo_pizzerias_path,
     )

@@ -151,6 +151,9 @@ def test_chatgpt_openapi_includes_sales_summary() -> None:
     assert operation["operationId"] == "getDodoAccountingSalesSummary"
     parameter_names = {item["name"] for item in operation["parameters"]}
     assert {"units", "from", "to", "maxPagesPerUnit", "concurrency", "cacheMode"} <= parameter_names
+    units_param = next(item for item in operation["parameters"] if item["name"] == "units")
+    assert units_param["required"] is False
+    assert "Omit for all configured pizzerias" in units_param["description"]
     assert "fields" not in parameter_names
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/DodoSalesSummaryResponse"
@@ -174,6 +177,8 @@ def test_chatgpt_openapi_includes_sales_comparison() -> None:
         "concurrency",
         "cacheMode",
     } <= parameter_names
+    units_param = next(item for item in operation["parameters"] if item["name"] == "units")
+    assert units_param["required"] is False
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/DodoSalesComparisonResponse"
     }
@@ -187,6 +192,8 @@ def test_chatgpt_openapi_includes_product_writeoff_summary() -> None:
     assert operation["operationId"] == "getDodoAccountingProductWriteoffSummary"
     parameter_names = {item["name"] for item in operation["parameters"]}
     assert {"units", "from", "to", "productNamePrefix", "includeProducts", "includeReasons"} <= parameter_names
+    units_param = next(item for item in operation["parameters"] if item["name"] == "units")
+    assert units_param["required"] is False
     assert "fields" not in parameter_names
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/DodoWriteoffSummaryResponse"
@@ -200,6 +207,8 @@ def test_chatgpt_openapi_includes_slice_writeoff_rate() -> None:
     assert operation["operationId"] == "getDodoSliceWriteoffRate"
     parameter_names = {item["name"] for item in operation["parameters"]}
     assert {"units", "from", "to", "productNamePrefix", "includeProducts"} <= parameter_names
+    units_param = next(item for item in operation["parameters"] if item["name"] == "units")
+    assert units_param["required"] is False
     assert "fields" not in parameter_names
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/DodoSliceWriteoffRateResponse"

@@ -66,6 +66,7 @@ def refresh_cache(
     units: str,
     from_date: date,
     to_date: date,
+    cache_mode: str,
     timeout: int,
 ) -> dict[str, Any]:
     settings = get_settings()
@@ -79,7 +80,7 @@ def refresh_cache(
             "units": units,
             "from": from_date.isoformat(),
             "to": to_date.isoformat(),
-            "cacheMode": "refresh",
+            "cacheMode": cache_mode,
         },
         timeout=timeout,
     )
@@ -94,6 +95,12 @@ def main() -> int:
     parser.add_argument("--to", dest="to_date", type=date.fromisoformat)
     parser.add_argument("--units", default="all", help="Comma-separated unit ids, or 'all'.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
+    parser.add_argument(
+        "--cache-mode",
+        choices=["auto", "refresh"],
+        default="refresh",
+        help="Use refresh for authoritative recalculation, or auto to fill only cache misses.",
+    )
     parser.add_argument("--timeout", type=int, default=900)
     args = parser.parse_args()
 
@@ -109,6 +116,7 @@ def main() -> int:
             units=units,
             from_date=from_day,
             to_date=to_day,
+            cache_mode=args.cache_mode,
             timeout=args.timeout,
         )
     except Exception as exc:
@@ -123,6 +131,7 @@ def main() -> int:
                 "complete": result.get("complete"),
                 "total": result.get("total"),
                 "source": result.get("source"),
+                "cache_mode": args.cache_mode,
             },
             ensure_ascii=False,
             default=str,
