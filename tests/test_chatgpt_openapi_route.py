@@ -10,7 +10,7 @@ def test_chatgpt_openapi_yaml_route_is_public_and_uses_request_host() -> None:
     client = TestClient(app)
 
     response = client.get(
-        "/openapi/chatgpt.yaml",
+        "/chatgpt/openapi.yaml",
         headers={"host": "bridge.example.com"},
     )
 

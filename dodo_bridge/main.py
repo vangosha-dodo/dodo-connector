@@ -81,7 +81,7 @@ def health(settings: Settings = Depends(settings_dep)) -> dict[str, Any]:
     }
 
 
-@app.get("/openapi/chatgpt.yaml", include_in_schema=False)
+@app.get("/chatgpt/openapi.yaml", include_in_schema=False)
 def chatgpt_openapi_yaml(request: Request) -> PlainTextResponse:
     server_url = str(request.base_url).rstrip("/")
     schema = build_schema(server_url)

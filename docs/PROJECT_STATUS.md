@@ -39,7 +39,7 @@ separate explicit enablement path.
 - Public Cloudflare URL for ChatGPT Action calls.
 - OpenAPI export script for ChatGPT Actions.
 - Public ChatGPT Action schema URL:
-  - `GET /openapi/chatgpt.yaml`
+  - `GET /chatgpt/openapi.yaml`
   - This generates the current read-only Action schema from Bridge code.
 - GitHub synchronization for the local project.
 
@@ -207,7 +207,7 @@ Goal: make the agent reliably choose compact endpoints.
 Actions:
 
 - Import the latest schema from:
-  - `https://dock-translations-investigated-basketball.trycloudflare.com/openapi/chatgpt.yaml`
+  - `https://dock-translations-investigated-basketball.trycloudflare.com/chatgpt/openapi.yaml`
 - Update the agent prompt:
   - read-only mode is mandatory;
   - use `getDodoAccountingSalesSummary` for revenue;
