@@ -78,6 +78,7 @@ separate explicit enablement path.
 - `GET /dodo/accounting/sales/summary`
 - `GET /dodo/accounting/sales/comparison`
 - `GET /dodo/accounting/sales/channels-summary`
+- `GET /dodo/accounting/sales/discounts-summary`
 - `GET /dodo/accounting/writeoffs/products`
 - `GET /dodo/accounting/writeoffs/products/summary`
 - `GET /dodo/accounting/slices/writeoff-rate`
@@ -121,6 +122,14 @@ answers instead of huge raw Dodo rows.
   - Returns restaurant and delivery checks/day z-scores for CVM analysis.
   - Returns kiosk order/sales share from `orderSource=Kiosk`.
   - `units` is optional; when omitted, Bridge uses all configured pizzerias.
+- Sales discount category summary:
+  - `GET /dodo/accounting/sales/discounts-summary`
+  - Groups read-only product discounts by heuristic categories such as CVM,
+    local, combo, dodocoins, certificates, vouchers, employee, and other.
+  - Returns discount amount and percent of sales without discount.
+  - `includeActions=true` returns top source Dodo actions with masked promocode
+    metadata.
+  - `units` is optional; when omitted, Bridge uses all configured pizzerias.
 
 ### Superset read-only capabilities
 
@@ -154,8 +163,8 @@ answers instead of huge raw Dodo rows.
 
 ### Tests
 
-- Local test suite after sales channel/source changes:
-  - `97 passed`
+- Local test suite after sales discount category changes:
+  - `100 passed`
 
 ### Live checks
 
@@ -163,8 +172,11 @@ answers instead of huge raw Dodo rows.
 - Public Cloudflare route for `GET /dodo/accounting/sales/comparison` returns `200`.
 - Public Cloudflare route for `GET /dodo/accounting/sales/channels-summary`
   returns `200`.
+- Public Cloudflare route for `GET /dodo/accounting/sales/discounts-summary`
+  returns `200`.
 - Public OpenAPI schema includes `getDodoAccountingSalesComparison`.
 - Public OpenAPI schema includes `getDodoAccountingSalesChannelsSummary`.
+- Public OpenAPI schema includes `getDodoAccountingSalesDiscountsSummary`.
 - Internal `POST /auth/kb/refresh` successfully created
   `dodopizza_info_session.json` from `dodopizza.info`.
 - Internal `POST /auth/kb/status` returned `ok: true` for the saved Knowledge
@@ -187,6 +199,7 @@ First implemented metric block:
 - restaurant checks/day z-score;
 - delivery checks/day z-score;
 - kiosk share from sales source/order source data.
+- first-pass discount category shares from Dodo sales product discount metadata.
 
 Blocked or pending metric blocks:
 
@@ -194,8 +207,7 @@ Blocked or pending metric blocks:
   recipe;
 - production/load metrics require `productionefficiency` scope or Superset/web
   recipes;
-- discount category shares are next priority and need either Dodo sales discount
-  classification or a general Superset discount recipe.
+- exact discount-tab parity still needs a general Superset discount recipe.
 
 ### Example result
 

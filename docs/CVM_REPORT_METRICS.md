@@ -27,11 +27,12 @@ The sheet combines pizzeria/month dimensions with these source indicators:
      order/source share, and supporting sales/order breakdowns.
    - Source: read-only Dodo IS `accounting/sales`.
 2. Discount category summary.
-   - Needed for CVM/local/combo/coins/certificates and other discount shares.
-   - Candidate sources: Dodo IS `accounting/sales` product discount fields or
-     the approved Superset discount chart/payload.
-   - Next implementation should classify `products[].discount.bonusActionName`
-     and/or add a Superset discount recipe for the exact `Дисконт` tab layout.
+   - Implemented as `GET /dodo/accounting/sales/discounts-summary`.
+   - Covers a first-pass read-only classification for CVM/local/combo/coins/
+     certificates/employee/other discount shares from Dodo sales product
+     discount metadata.
+   - Caveat: category labels are heuristic. Exact parity with the Google Sheet
+     `Дисконт` tab still needs an approved Superset discount recipe.
 3. Client metrics.
    - Needed for new client share and 30-day churn.
    - Direct Dodo API probe for `orders/clients-statistics` returned

@@ -24,6 +24,7 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
         "/dodo/accounting/sales/summary",
         "/dodo/accounting/sales/comparison",
         "/dodo/accounting/sales/channels-summary",
+        "/dodo/accounting/sales/discounts-summary",
         "/dodo/accounting/writeoffs/products",
         "/dodo/accounting/writeoffs/products/summary",
         "/dodo/accounting/slices/writeoff-rate",
@@ -201,6 +202,29 @@ def test_chatgpt_openapi_includes_sales_channels_summary() -> None:
     }
     assert "DodoSalesChannelsUnit" in schema["components"]["schemas"]
     assert "DodoKioskShare" in schema["components"]["schemas"]
+
+
+def test_chatgpt_openapi_includes_sales_discounts_summary() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    operation = schema["paths"]["/dodo/accounting/sales/discounts-summary"]["get"]
+    assert operation["operationId"] == "getDodoAccountingSalesDiscountsSummary"
+    parameter_names = {item["name"] for item in operation["parameters"]}
+    assert {
+        "units",
+        "from",
+        "to",
+        "maxPagesPerUnit",
+        "concurrency",
+        "includeActions",
+        "topActionsLimit",
+    } <= parameter_names
+    assert "cacheMode" not in parameter_names
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/DodoSalesDiscountsSummaryResponse"
+    }
+    assert "DodoSalesDiscountCategory" in schema["components"]["schemas"]
+    assert "DodoSalesDiscountAction" in schema["components"]["schemas"]
 
 
 def test_chatgpt_openapi_includes_product_writeoff_summary() -> None:

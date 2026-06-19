@@ -375,6 +375,65 @@ async def accounting_sales_channels_summary(
     return result
 
 
+@router.get("/accounting/sales/discounts-summary")
+async def accounting_sales_discounts_summary(
+    units: str | None = Query(
+        default=None,
+        description="Optional comma-separated Dodo unit ids. Omit for all configured pizzerias.",
+    ),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    include_actions: bool = Query(
+        default=False,
+        alias="includeActions",
+        description="When true, include top discount actions inside each category.",
+    ),
+    top_actions_limit: int = Query(
+        default=10,
+        alias="topActionsLimit",
+        ge=1,
+        le=200,
+        description="Maximum action rows per category when includeActions=true.",
+    ),
+    take: int | None = Query(default=None, ge=1),
+    max_pages_per_unit: int | None = Query(default=None, alias="maxPagesPerUnit", ge=1),
+    concurrency: int | None = Query(default=None, ge=1, le=8),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _period_params(
+        context.settings,
+        _units_or_all_pizzerias(context.settings, units),
+        from_date,
+        to_date,
+        exclusive_to=True,
+    )
+    result = await context.service.fetch_sales_discounts_summary(
+        parameters=params,
+        dry_run=dry_run,
+        include_actions=include_actions,
+        top_actions_limit=top_actions_limit,
+        take=take,
+        max_pages_per_unit=max_pages_per_unit,
+        concurrency=concurrency,
+    )
+    _record_dodo_audit(
+        context,
+        function_name="accounting_sales_discounts_summary",
+        parameters={
+            **params,
+            "includeActions": include_actions,
+            "topActionsLimit": top_actions_limit,
+        },
+        dry_run=dry_run,
+        fields=None,
+        take=take,
+        max_pages=max_pages_per_unit,
+        result=result,
+    )
+    return result
+
+
 @router.get("/accounting/writeoffs/products")
 async def accounting_writeoffs_products(
     units: str = Query(..., description="Comma-separated Dodo unit ids."),

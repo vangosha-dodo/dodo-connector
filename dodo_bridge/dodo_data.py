@@ -72,6 +72,12 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         description="Accounting sales aggregation by sales channel and order source.",
         row_keys=("sales", "items"),
     ),
+    "accounting_sales_discounts_summary": DodoDataFunction(
+        name="accounting_sales_discounts_summary",
+        tool_name="dodo_accounting_sales",
+        description="Accounting sales discount aggregation by heuristic category and action.",
+        row_keys=("sales", "items"),
+    ),
     "accounting_writeoffs_products": DodoDataFunction(
         name="accounting_writeoffs_products",
         tool_name="dodo_accounting_writeoffs_products",
@@ -684,6 +690,126 @@ class DodoDataService:
             ],
         }
 
+    async def fetch_sales_discounts_summary(
+        self,
+        *,
+        parameters: dict[str, Any],
+        dry_run: bool,
+        include_actions: bool,
+        top_actions_limit: int,
+        take: int | None = None,
+        max_pages_per_unit: int | None = None,
+        concurrency: int | None = None,
+    ) -> dict[str, Any]:
+        function = FUNCTIONS["accounting_sales_discounts_summary"]
+        tool = self._allowed_tool(function, parameters, dry_run)
+        unit_ids = normalize_units(str(parameters["units"])).split(",")
+        take_value = self._bounded_take(take or self.settings.dodo_data_max_take)
+        max_pages_value = _bounded_sales_summary_max_pages(max_pages_per_unit)
+        concurrency_value = _bounded_sales_summary_concurrency(concurrency, len(unit_ids))
+        action_limit_value = _bounded_discount_action_limit(top_actions_limit)
+        base_params = dict(parameters)
+        days = _sales_summary_days(parameters)
+
+        if dry_run:
+            requests_preview = []
+            for unit_id in unit_ids[:10]:
+                request_params = {
+                    **base_params,
+                    "units": unit_id,
+                    "skip": 0,
+                    "take": take_value,
+                }
+                requests_preview.append(
+                    {
+                        "unitId": unit_id,
+                        "request": self.connector.build_request(tool, request_params),
+                    }
+                )
+            return {
+                "function": "accounting_sales_discounts_summary",
+                "tool_name": tool.name,
+                "dry_run": True,
+                "request_count": len(unit_ids),
+                "requests_preview": requests_preview,
+                "pagination": {
+                    "take": take_value,
+                    "max_pages_per_unit": max_pages_value,
+                    "concurrency": concurrency_value,
+                },
+                "options": {
+                    "includeActions": include_actions,
+                    "topActionsLimit": action_limit_value,
+                },
+            }
+
+        unit_names = self._unit_names_by_id()
+        semaphore = asyncio.Semaphore(concurrency_value)
+        unit_results = await asyncio.gather(
+            *(
+                self._fetch_sales_discounts_summary_for_unit(
+                    tool=tool,
+                    base_params=base_params,
+                    unit_id=unit_id,
+                    unit_name=unit_names.get(unit_id),
+                    take=take_value,
+                    max_pages=max_pages_value,
+                    include_actions=include_actions,
+                    top_actions_limit=action_limit_value,
+                    semaphore=semaphore,
+                )
+                for unit_id in unit_ids
+            )
+        )
+
+        total_bucket = _new_sales_discount_bucket()
+        pages_fetched = 0
+        truncated_units = []
+        for unit in unit_results:
+            _add_sales_discount_bucket(total_bucket, unit.pop("_bucket"))
+            pages_fetched += int(unit["source"]["pagesFetched"])
+            if unit["source"]["truncated"]:
+                truncated_units.append({"unitId": unit["unitId"], "unitName": unit.get("unitName")})
+
+        unit_results.sort(key=lambda item: item.get("unitName") or item["unitId"])
+        return {
+            "function": "accounting_sales_discounts_summary",
+            "tool_name": tool.name,
+            "period": {
+                "from": str(parameters.get("from")),
+                "to": str(parameters.get("to")),
+                "to_is_exclusive": True,
+                "days": len(days),
+            },
+            "complete": not truncated_units,
+            "total": _finalize_sales_discount_total(total_bucket),
+            "categories": _finalize_discount_categories(
+                total_bucket["categories"],
+                total_bucket["discountAmount"],
+                total_bucket["salesWithoutDiscount"],
+                include_actions=include_actions,
+                top_actions_limit=action_limit_value,
+            ),
+            "units": unit_results,
+            "source": {
+                "rawRowsAggregated": int(total_bucket["orders"]),
+                "pagesFetched": pages_fetched,
+                "take": take_value,
+                "maxPagesPerUnit": max_pages_value,
+                "concurrency": concurrency_value,
+                "truncatedUnits": truncated_units,
+            },
+            "options": {
+                "includeActions": include_actions,
+                "topActionsLimit": action_limit_value,
+            },
+            "notes": [
+                "Discount categories are heuristic labels computed from Dodo action names and promocodes.",
+                "Use includeActions=true to inspect source actions behind a category.",
+                "For exact Superset discount-tab parity, add an approved Superset discount recipe.",
+            ],
+        }
+
     async def fetch_slice_writeoff_rate(
         self,
         *,
@@ -1017,6 +1143,71 @@ class DodoDataService:
                 "salesChannels": _finalize_named_sales_buckets(sales_channels, days_count, "salesChannel"),
                 "orderSources": _finalize_named_sales_buckets(order_sources, days_count, "orderSource"),
                 "kioskShare": _kiosk_share(order_sources, sales_channels),
+                "source": {
+                    "rowsKey": rows_key,
+                    "pagesFetched": pages_fetched,
+                    "truncated": truncated,
+                    "nextSkip": pages_fetched * take if truncated else None,
+                },
+            }
+
+    async def _fetch_sales_discounts_summary_for_unit(
+        self,
+        *,
+        tool: ToolSpec,
+        base_params: dict[str, Any],
+        unit_id: str,
+        unit_name: str | None,
+        take: int,
+        max_pages: int,
+        include_actions: bool,
+        top_actions_limit: int,
+        semaphore: asyncio.Semaphore,
+    ) -> dict[str, Any]:
+        async with semaphore:
+            bucket = _new_sales_discount_bucket()
+            rows_key: str | None = None
+            pages_fetched = 0
+            truncated = False
+            for page in range(max_pages):
+                page_params = {
+                    **base_params,
+                    "units": unit_id,
+                    "skip": page * take,
+                    "take": take,
+                }
+                payload = await self._invoke_tool(tool, page_params)
+                current_key, rows = extract_rows(payload, FUNCTIONS["accounting_sales"].row_keys)
+                if rows is None:
+                    raise HTTPException(
+                        status_code=502,
+                        detail={
+                            "error": "unexpected_external_response",
+                            "tool_name": tool.name,
+                            "unitId": unit_id,
+                        },
+                    )
+                rows_key = rows_key or current_key
+                pages_fetched += 1
+                _add_sales_discount_rows(bucket, rows)
+                if len(rows) < take:
+                    break
+            else:
+                truncated = True
+
+            name = str(bucket.get("unitName") or unit_name or "")
+            return {
+                "unitId": unit_id,
+                "unitName": name or None,
+                "total": _finalize_sales_discount_total(bucket),
+                "categories": _finalize_discount_categories(
+                    bucket["categories"],
+                    bucket["discountAmount"],
+                    bucket["salesWithoutDiscount"],
+                    include_actions=include_actions,
+                    top_actions_limit=top_actions_limit,
+                ),
+                "_bucket": bucket,
                 "source": {
                     "rowsKey": rows_key,
                     "pagesFetched": pages_fetched,
@@ -1413,6 +1604,11 @@ def _bounded_sales_summary_concurrency(value: int | None, unit_count: int) -> in
     return max(1, min(concurrency, SALES_SUMMARY_MAX_CONCURRENCY, max(unit_count, 1)))
 
 
+def _bounded_discount_action_limit(value: int | None) -> int:
+    limit = value if value is not None else 10
+    return max(1, min(limit, 200))
+
+
 def _sales_summary_days(parameters: dict[str, Any]) -> list[str]:
     from_day = date.fromisoformat(str(parameters["from"]))
     to_exclusive = date.fromisoformat(str(parameters["to"]))
@@ -1678,6 +1874,346 @@ def _finalize_named_sales_buckets(
     result = []
     for name in sorted(buckets):
         result.append({name_key: name, **_finalize_sales_channel_bucket(buckets[name], days_count)})
+    return result
+
+
+DISCOUNT_CATEGORY_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("cvm", "CVM", ("cvm",)),
+    ("employee", "Сотрудникам", ("сотрудник", "employee", "staff")),
+    ("combo", "Комбо", ("combo", "комбо")),
+    ("dodo_coins", "Додокоины", ("додокоин", "dodo coin", "dodo coins", "coin")),
+    ("certificate", "Сертификаты", ("сертификат", "certificate")),
+    ("voucher", "Ваучеры", ("voucher", "ваучер")),
+    ("customer_support", "Customer support", ("customer support", "поддержк", "компенсац")),
+    ("local", "Локальный", ("local", "локал")),
+    ("regional", "Региональный", ("regional", "регион")),
+    ("federal", "Федеральный", ("federal", "федерал")),
+    ("b2b", "B2B", ("b2b", "корпоратив")),
+    ("sauces_addons", "Соусы и добавки", ("соус", "сахар", "прибор", "сгущ", "варенье")),
+    ("new_customer", "Новые клиенты", ("новые клиент", "new client", "first25", "первый заказ")),
+    ("personal_price", "Персональная цена", ("personalprice", "personal price", "персональн")),
+)
+
+
+def _new_sales_discount_bucket() -> dict[str, Any]:
+    return {
+        "orders": 0,
+        "products": 0,
+        "salesWithDiscount": 0.0,
+        "salesWithoutDiscount": 0.0,
+        "discountAmount": 0.0,
+        "discountedOrders": 0,
+        "discountedProducts": 0,
+        "categories": {},
+    }
+
+
+def _new_discount_category_bucket(category: str, category_name: str) -> dict[str, Any]:
+    return {
+        "category": category,
+        "categoryName": category_name,
+        "orders": 0,
+        "products": 0,
+        "salesWithDiscount": 0.0,
+        "salesWithoutDiscount": 0.0,
+        "discountAmount": 0.0,
+        "actions": {},
+    }
+
+
+def _new_discount_action_bucket(
+    *,
+    category: str,
+    action_name: str | None,
+    bonus_action_id: str | None,
+) -> dict[str, Any]:
+    return {
+        "category": category,
+        "actionName": action_name,
+        "bonusActionId": bonus_action_id,
+        "orders": 0,
+        "products": 0,
+        "salesWithDiscount": 0.0,
+        "salesWithoutDiscount": 0.0,
+        "discountAmount": 0.0,
+        "promocodeProducts": 0,
+        "promocodeMasked": None,
+    }
+
+
+def _add_sales_discount_rows(bucket: dict[str, Any], rows: list[Any]) -> None:
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if row.get("unitId"):
+            bucket["unitId"] = row["unitId"]
+        if row.get("unitName"):
+            bucket["unitName"] = row["unitName"]
+        bucket["orders"] += 1
+
+        row_has_discount = False
+        category_hits: set[str] = set()
+        action_hits: set[tuple[str, str]] = set()
+        products = row.get("products")
+        if not isinstance(products, list):
+            continue
+        for product in products:
+            if not isinstance(product, dict):
+                continue
+            price = _as_float(product.get("price"))
+            price_with_discount = _as_float(product.get("priceWithDiscount"))
+            discount_amount = max(0.0, price - price_with_discount)
+            bucket["products"] += 1
+            bucket["salesWithoutDiscount"] += price
+            bucket["salesWithDiscount"] += price_with_discount
+            bucket["discountAmount"] += discount_amount
+            if discount_amount <= 0:
+                continue
+
+            row_has_discount = True
+            bucket["discountedProducts"] += 1
+            discount = product.get("discount") if isinstance(product.get("discount"), dict) else {}
+            category, category_name = _classify_discount_category(discount)
+            category_bucket = bucket["categories"].setdefault(
+                category,
+                _new_discount_category_bucket(category, category_name),
+            )
+            _add_discount_product_metrics(
+                category_bucket,
+                products=1,
+                sales_with_discount=price_with_discount,
+                sales_without_discount=price,
+                discount_amount=discount_amount,
+            )
+            category_hits.add(category)
+
+            action_key, action_bucket = _discount_action_identity(discount, category)
+            existing_action_bucket = category_bucket["actions"].setdefault(action_key, action_bucket)
+            _add_discount_product_metrics(
+                existing_action_bucket,
+                products=1,
+                sales_with_discount=price_with_discount,
+                sales_without_discount=price,
+                discount_amount=discount_amount,
+            )
+            promo = str(discount.get("promoCode") or "").strip()
+            if promo:
+                existing_action_bucket["promocodeProducts"] += 1
+                if not existing_action_bucket.get("promocodeMasked"):
+                    existing_action_bucket["promocodeMasked"] = _mask_promocode(promo)
+            action_hits.add((category, action_key))
+
+        if row_has_discount:
+            bucket["discountedOrders"] += 1
+        for category in category_hits:
+            bucket["categories"][category]["orders"] += 1
+        for category, action_key in action_hits:
+            bucket["categories"][category]["actions"][action_key]["orders"] += 1
+
+
+def _add_discount_product_metrics(
+    bucket: dict[str, Any],
+    *,
+    products: int,
+    sales_with_discount: float,
+    sales_without_discount: float,
+    discount_amount: float,
+) -> None:
+    bucket["products"] += products
+    bucket["salesWithDiscount"] += sales_with_discount
+    bucket["salesWithoutDiscount"] += sales_without_discount
+    bucket["discountAmount"] += discount_amount
+
+
+def _classify_discount_category(discount: dict[str, Any]) -> tuple[str, str]:
+    text = _normalized_discount_text(
+        discount.get("bonusActionName"),
+        discount.get("promoCode"),
+        discount.get("bonusActionId"),
+    )
+    for category, category_name, needles in DISCOUNT_CATEGORY_RULES:
+        if any(needle in text for needle in needles):
+            return category, category_name
+    if str(discount.get("promoCode") or "").strip():
+        return "promocode_other", "Промокод: прочее"
+    return "other", "Прочее"
+
+
+def _normalized_discount_text(*values: Any) -> str:
+    text = " ".join(str(value or "") for value in values).casefold()
+    return text.replace("сvm", "cvm").replace("сvм", "cvm").replace("cvм", "cvm")
+
+
+def _discount_action_identity(discount: dict[str, Any], category: str) -> tuple[str, dict[str, Any]]:
+    action_name = str(discount.get("bonusActionName") or "").strip() or None
+    bonus_action_id = str(discount.get("bonusActionId") or "").strip() or None
+    promo = str(discount.get("promoCode") or "").strip()
+    identity = bonus_action_id or action_name or (f"promo:{_mask_promocode(promo)}" if promo else "unknown")
+    action_key = f"{category}:{identity}"
+    return (
+        action_key,
+        _new_discount_action_bucket(
+            category=category,
+            action_name=action_name,
+            bonus_action_id=bonus_action_id,
+        ),
+    )
+
+
+def _mask_promocode(value: str) -> str:
+    text = value.strip()
+    if not text:
+        return ""
+    if len(text) <= 4:
+        return "*" * len(text)
+    return f"{text[:2]}***{text[-2:]}"
+
+
+def _add_sales_discount_bucket(total: dict[str, Any], bucket: dict[str, Any]) -> None:
+    for key in ("orders", "products", "discountedOrders", "discountedProducts"):
+        total[key] += int(bucket.get(key) or 0)
+    for key in ("salesWithDiscount", "salesWithoutDiscount", "discountAmount"):
+        total[key] += _as_float(bucket.get(key))
+
+    for category, category_bucket in bucket.get("categories", {}).items():
+        target = total["categories"].setdefault(
+            category,
+            _new_discount_category_bucket(
+                category,
+                str(category_bucket.get("categoryName") or category),
+            ),
+        )
+        target["orders"] += int(category_bucket.get("orders") or 0)
+        _add_discount_product_metrics(
+            target,
+            products=int(category_bucket.get("products") or 0),
+            sales_with_discount=_as_float(category_bucket.get("salesWithDiscount")),
+            sales_without_discount=_as_float(category_bucket.get("salesWithoutDiscount")),
+            discount_amount=_as_float(category_bucket.get("discountAmount")),
+        )
+        for action_key, action_bucket in category_bucket.get("actions", {}).items():
+            target_action = target["actions"].setdefault(
+                action_key,
+                _new_discount_action_bucket(
+                    category=category,
+                    action_name=action_bucket.get("actionName"),
+                    bonus_action_id=action_bucket.get("bonusActionId"),
+                ),
+            )
+            target_action["orders"] += int(action_bucket.get("orders") or 0)
+            target_action["promocodeProducts"] += int(action_bucket.get("promocodeProducts") or 0)
+            if not target_action.get("promocodeMasked") and action_bucket.get("promocodeMasked"):
+                target_action["promocodeMasked"] = action_bucket["promocodeMasked"]
+            _add_discount_product_metrics(
+                target_action,
+                products=int(action_bucket.get("products") or 0),
+                sales_with_discount=_as_float(action_bucket.get("salesWithDiscount")),
+                sales_without_discount=_as_float(action_bucket.get("salesWithoutDiscount")),
+                discount_amount=_as_float(action_bucket.get("discountAmount")),
+            )
+
+
+def _finalize_sales_discount_total(bucket: dict[str, Any]) -> dict[str, Any]:
+    result = {
+        "orders": int(bucket["orders"]),
+        "products": int(bucket["products"]),
+        "salesWithDiscount": _round_metric(bucket["salesWithDiscount"]),
+        "salesWithoutDiscount": _round_metric(bucket["salesWithoutDiscount"]),
+        "discountAmount": _round_metric(bucket["discountAmount"]),
+        "discountedOrders": int(bucket["discountedOrders"]),
+        "discountedProducts": int(bucket["discountedProducts"]),
+        "discountShareOfSalesWithoutDiscountPercent": _percent(
+            bucket["discountAmount"],
+            bucket["salesWithoutDiscount"],
+        ),
+    }
+    return result
+
+
+def _finalize_discount_categories(
+    categories: dict[str, dict[str, Any]],
+    total_discount: float,
+    total_sales_without_discount: float,
+    *,
+    include_actions: bool,
+    top_actions_limit: int,
+) -> list[dict[str, Any]]:
+    result = []
+    for category_bucket in sorted(
+        categories.values(),
+        key=lambda item: (-_as_float(item.get("discountAmount")), str(item.get("category"))),
+    ):
+        result.append(
+            _finalize_discount_category(
+                category_bucket,
+                total_discount,
+                total_sales_without_discount,
+                include_actions=include_actions,
+                top_actions_limit=top_actions_limit,
+            )
+        )
+    return result
+
+
+def _finalize_discount_category(
+    bucket: dict[str, Any],
+    total_discount: float,
+    total_sales_without_discount: float,
+    *,
+    include_actions: bool,
+    top_actions_limit: int,
+) -> dict[str, Any]:
+    discount_amount = _as_float(bucket.get("discountAmount"))
+    sales_without_discount = _as_float(bucket.get("salesWithoutDiscount"))
+    item: dict[str, Any] = {
+        "category": bucket["category"],
+        "categoryName": bucket["categoryName"],
+        "orders": int(bucket["orders"]),
+        "products": int(bucket["products"]),
+        "salesWithDiscount": _round_metric(_as_float(bucket.get("salesWithDiscount"))),
+        "salesWithoutDiscount": _round_metric(sales_without_discount),
+        "discountAmount": _round_metric(discount_amount),
+        "shareOfTotalDiscountPercent": _percent(discount_amount, total_discount),
+        "shareOfTotalSalesWithoutDiscountPercent": _percent(discount_amount, total_sales_without_discount),
+        "discountPercentOfCategorySalesWithoutDiscount": _percent(discount_amount, sales_without_discount),
+    }
+    if include_actions:
+        item["actions"] = _finalize_discount_actions(
+            bucket.get("actions", {}),
+            category_discount=discount_amount,
+            top_actions_limit=top_actions_limit,
+        )
+    return item
+
+
+def _finalize_discount_actions(
+    actions: dict[str, dict[str, Any]],
+    *,
+    category_discount: float,
+    top_actions_limit: int,
+) -> list[dict[str, Any]]:
+    result = []
+    for action in sorted(
+        actions.values(),
+        key=lambda item: (-_as_float(item.get("discountAmount")), str(item.get("actionName") or "")),
+    )[:top_actions_limit]:
+        discount_amount = _as_float(action.get("discountAmount"))
+        sales_without_discount = _as_float(action.get("salesWithoutDiscount"))
+        result.append(
+            {
+                "actionName": action.get("actionName"),
+                "bonusActionId": action.get("bonusActionId"),
+                "orders": int(action["orders"]),
+                "products": int(action["products"]),
+                "salesWithDiscount": _round_metric(_as_float(action.get("salesWithDiscount"))),
+                "salesWithoutDiscount": _round_metric(sales_without_discount),
+                "discountAmount": _round_metric(discount_amount),
+                "shareOfCategoryDiscountPercent": _percent(discount_amount, category_discount),
+                "discountPercentOfActionSalesWithoutDiscount": _percent(discount_amount, sales_without_discount),
+                "promocodeProducts": int(action.get("promocodeProducts") or 0),
+                "promocodeMasked": action.get("promocodeMasked"),
+            }
+        )
     return result
 
 

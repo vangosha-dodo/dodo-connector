@@ -178,6 +178,44 @@ Returned metrics:
 This endpoint does not use the daily sales cache because it needs dimensions
 that are not stored in the compact revenue cache.
 
+### Accounting Sales Discounts Summary
+
+```http
+GET /dodo/accounting/sales/discounts-summary?from=2026-06-01&to=2026-06-30
+```
+
+Uses the same Dodo IS read-only accounting sales endpoint, but aggregates
+product discounts inside the Bridge. Prefer this endpoint for first-pass CVM
+report discount metrics when the task asks for CVM/local/combo/dodocoin/
+certificate discount shares by pizzeria.
+
+For all configured pizzerias, omit `units`. For a narrowed report, pass
+`units=<unit-id>`.
+
+Returned metrics:
+
+- `total.discountAmount` - total product discount amount.
+- `total.discountShareOfSalesWithoutDiscountPercent` - total discount as a
+  percent of sales without discount.
+- `categories` - heuristic discount buckets such as `cvm`, `local`, `combo`,
+  `dodo_coins`, `certificate`, `voucher`, `employee`, `sauces_addons`, and
+  `other`.
+- `shareOfTotalSalesWithoutDiscountPercent` - category discount as a percent of
+  all sales without discount.
+- `discountPercentOfCategorySalesWithoutDiscount` - category discount as a
+  percent of products that fell into this category.
+
+Optional flags:
+
+- `includeActions=true` - include top source Dodo discount actions under each
+  category.
+- `topActionsLimit=10` - maximum action rows per category.
+
+The category label is a transparent heuristic from Dodo action names and masked
+promocode metadata. Use `includeActions=true` to inspect source action names.
+For exact parity with the Google Sheet `Дисконт` tab, add a dedicated approved
+Superset recipe.
+
 ### Product Write-offs
 
 ```http

@@ -113,6 +113,26 @@ SALES_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
 
 SALES_CHANNELS_PARAMETERS: list[dict[str, Any]] = SALES_SUMMARY_PARAMETERS[:-1]
 
+SALES_DISCOUNTS_PARAMETERS: list[dict[str, Any]] = (
+    SALES_CHANNELS_PARAMETERS
+    + [
+        {
+            "name": "includeActions",
+            "in": "query",
+            "required": False,
+            "description": "When true, include top discount actions inside each category.",
+            "schema": {"type": "boolean", "default": False},
+        },
+        {
+            "name": "topActionsLimit",
+            "in": "query",
+            "required": False,
+            "description": "Maximum action rows per category when includeActions=true.",
+            "schema": {"type": "integer", "minimum": 1, "maximum": 200, "default": 10},
+        },
+    ]
+)
+
 SALES_COMPARISON_PARAMETERS: list[dict[str, Any]] = (
     [COMPACT_UNITS_PARAMETER, *COMMON_PERIOD_PARAMETERS[1:3]]
     + [
@@ -556,6 +576,21 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ),
                 }
             },
+            "/dodo/accounting/sales/discounts-summary": {
+                "get": {
+                    "operationId": "getDodoAccountingSalesDiscountsSummary",
+                    "summary": "Get sales discount categories",
+                    "description": (
+                        "Aggregate read-only sales discounts by heuristic category. "
+                        "Use for CVM/local/combo/coins/certificate discount shares."
+                    ),
+                    "parameters": SALES_DISCOUNTS_PARAMETERS,
+                    "responses": successful_response(
+                        "Accounting sales discount category summary.",
+                        "#/components/schemas/DodoSalesDiscountsSummaryResponse",
+                    ),
+                }
+            },
             "/dodo/accounting/writeoffs/products": {
                 "get": {
                     "operationId": "getDodoAccountingProductWriteoffs",
@@ -668,6 +703,11 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "DodoSalesChannelsUnit": dodo_sales_channels_unit_schema(),
                 "DodoSalesChannelBucket": dodo_sales_channel_bucket_schema(),
                 "DodoKioskShare": dodo_kiosk_share_schema(),
+                "DodoSalesDiscountsSummaryResponse": dodo_sales_discounts_summary_response_schema(),
+                "DodoSalesDiscountsUnit": dodo_sales_discounts_unit_schema(),
+                "DodoSalesDiscountTotal": dodo_sales_discount_total_schema(),
+                "DodoSalesDiscountCategory": dodo_sales_discount_category_schema(),
+                "DodoSalesDiscountAction": dodo_sales_discount_action_schema(),
                 "DodoSalesComparisonResponse": dodo_sales_comparison_response_schema(),
                 "DodoSalesComparisonPeriod": dodo_sales_comparison_period_schema(),
                 "DodoSalesComparisonUnit": dodo_sales_comparison_unit_schema(),
@@ -1180,6 +1220,176 @@ def dodo_kiosk_share_schema() -> dict[str, Any]:
             "shareOfRestaurantSalesPercent",
             "shareOfAllOrdersPercent",
             "shareOfAllSalesPercent",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_discounts_summary_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Compact read-only sales discount aggregation by heuristic category.",
+        "properties": {
+            "function": {"type": "string"},
+            "tool_name": {"type": "string"},
+            "dry_run": {"type": "boolean"},
+            "request_count": {"type": "integer"},
+            "requests_preview": {
+                "type": "array",
+                "items": {"type": "object", "additionalProperties": True},
+            },
+            "pagination": {"$ref": "#/components/schemas/DodoPagination"},
+            "period": {
+                "type": "object",
+                "properties": {
+                    "from": {"type": "string", "format": "date"},
+                    "to": {"type": "string", "format": "date"},
+                    "to_is_exclusive": {"type": "boolean"},
+                    "days": {"type": "integer"},
+                },
+                "additionalProperties": False,
+            },
+            "complete": {"type": "boolean"},
+            "total": {"$ref": "#/components/schemas/DodoSalesDiscountTotal"},
+            "categories": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoSalesDiscountCategory"},
+            },
+            "units": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoSalesDiscountsUnit"},
+            },
+            "source": {"$ref": "#/components/schemas/DodoSalesSummarySource"},
+            "options": {
+                "type": "object",
+                "properties": {
+                    "includeActions": {"type": "boolean"},
+                    "topActionsLimit": {"type": "integer"},
+                },
+                "additionalProperties": False,
+            },
+            "notes": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["function", "tool_name"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_discounts_unit_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "unitId": {"type": "string"},
+            "unitName": {"type": "string"},
+            "total": {"$ref": "#/components/schemas/DodoSalesDiscountTotal"},
+            "categories": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoSalesDiscountCategory"},
+            },
+            "source": {
+                "type": "object",
+                "properties": {
+                    "rowsKey": {"type": "string"},
+                    "pagesFetched": {"type": "integer"},
+                    "truncated": {"type": "boolean"},
+                    "nextSkip": {"type": "integer"},
+                },
+                "additionalProperties": False,
+            },
+        },
+        "required": ["unitId", "total", "categories"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_discount_total_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "orders": {"type": "integer"},
+            "products": {"type": "integer"},
+            "salesWithDiscount": {"type": "number"},
+            "salesWithoutDiscount": {"type": "number"},
+            "discountAmount": {"type": "number"},
+            "discountedOrders": {"type": "integer"},
+            "discountedProducts": {"type": "integer"},
+            "discountShareOfSalesWithoutDiscountPercent": {"type": "number"},
+        },
+        "required": [
+            "orders",
+            "products",
+            "salesWithDiscount",
+            "salesWithoutDiscount",
+            "discountAmount",
+            "discountedOrders",
+            "discountedProducts",
+            "discountShareOfSalesWithoutDiscountPercent",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_discount_category_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Heuristic discount category computed from Dodo action metadata.",
+        "properties": {
+            "category": {"type": "string"},
+            "categoryName": {"type": "string"},
+            "orders": {"type": "integer"},
+            "products": {"type": "integer"},
+            "salesWithDiscount": {"type": "number"},
+            "salesWithoutDiscount": {"type": "number"},
+            "discountAmount": {"type": "number"},
+            "shareOfTotalDiscountPercent": {"type": "number"},
+            "shareOfTotalSalesWithoutDiscountPercent": {"type": "number"},
+            "discountPercentOfCategorySalesWithoutDiscount": {"type": "number"},
+            "actions": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoSalesDiscountAction"},
+            },
+        },
+        "required": [
+            "category",
+            "categoryName",
+            "orders",
+            "products",
+            "salesWithDiscount",
+            "salesWithoutDiscount",
+            "discountAmount",
+            "shareOfTotalDiscountPercent",
+            "shareOfTotalSalesWithoutDiscountPercent",
+            "discountPercentOfCategorySalesWithoutDiscount",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_discount_action_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "actionName": {"type": ["string", "null"]},
+            "bonusActionId": {"type": ["string", "null"]},
+            "orders": {"type": "integer"},
+            "products": {"type": "integer"},
+            "salesWithDiscount": {"type": "number"},
+            "salesWithoutDiscount": {"type": "number"},
+            "discountAmount": {"type": "number"},
+            "shareOfCategoryDiscountPercent": {"type": "number"},
+            "discountPercentOfActionSalesWithoutDiscount": {"type": "number"},
+            "promocodeProducts": {"type": "integer"},
+            "promocodeMasked": {"type": ["string", "null"]},
+        },
+        "required": [
+            "orders",
+            "products",
+            "salesWithDiscount",
+            "salesWithoutDiscount",
+            "discountAmount",
+            "shareOfCategoryDiscountPercent",
+            "discountPercentOfActionSalesWithoutDiscount",
+            "promocodeProducts",
         ],
         "additionalProperties": False,
     }
