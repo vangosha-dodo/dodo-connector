@@ -41,3 +41,24 @@ The helper intentionally follows the OpenClaw pattern:
 - This is an admin workflow, not a normal ChatGPT tool. It should remain outside
   the LLM tool registry.
 
+## Knowledge Base Authorization
+
+The bridge also has a separate internal flow for Dodo Knowledge Base access:
+
+- `GET /auth/kb` - web form.
+- `POST /auth/kb/status` - check the saved KB session.
+- `POST /auth/kb/refresh` - refresh the KB session through Dodo IS login.
+
+Configure:
+
+```env
+DODO_KB_AUTH_HELPER_COMMAND=node scripts/dodo_kb_auth_flow.mjs
+DODO_KB_AUTH_COMMAND_TIMEOUT_SECONDS=300
+DODO_KB_BASE_URL=https://dodopizza.info
+DODO_KB_AUTH_SESSION_FILE=dodopizza_info_session.json
+DODO_KB_AUTH_MAIL_AUTH_FILE=/home/ubuntu/.openclaw/dodo/mail.ru_auth.json
+```
+
+This helper reads a fresh Dodo MFA email from the configured OpenClaw mailbox and
+never prints the code. It stores a dedicated KB cookie file so the old OpenClaw
+session files are left untouched.

@@ -67,6 +67,7 @@ OpenAPI is exposed at `http://127.0.0.1:8000/docs`.
 - `POST /feedback` - attach human feedback to an audit event.
 - `GET /learning/recommendations` - policy/tooling recommendations from audit data.
 - `GET /auth/dodo` - internal web form for Dodo IS session refresh and email MFA code entry.
+- `GET /auth/kb` - internal web form for Dodo Knowledge Base session refresh.
 
 ## First Tool Set
 
@@ -117,6 +118,14 @@ headless Chromium to check/refresh saved OfficeManager/admin Dodo IS sessions. I
 Dodo asks for an email MFA code, submit the fresh 6-digit code in the web form.
 
 The code is passed to the helper through stdin, not command-line arguments.
+
+## Dodo Knowledge Base Auth
+
+Open `/auth/kb` after configuring `DODO_KB_AUTH_HELPER_COMMAND`. The helper logs
+in to `dodopizza.info` through Dodo IS, reads the fresh MFA email from the
+configured OpenClaw mailbox, and saves a dedicated KB cookie file.
+
+This route is internal-only and is not exported to the ChatGPT Action schema.
 
 ## Implementation Principle
 

@@ -125,6 +125,12 @@ answers instead of huge raw Dodo rows.
 - Internal Dodo IS web authorization page:
   - `GET /auth/dodo`
   - Supports session refresh and email MFA code entry.
+- Internal Dodo Knowledge Base authorization page:
+  - `GET /auth/kb`
+  - `POST /auth/kb/status`
+  - `POST /auth/kb/refresh`
+  - Reuses OpenClaw Dodo credentials and mailbox access to refresh
+    `dodopizza.info` cookies without printing MFA codes.
 - This is admin/internal and is not exported to ChatGPT Action schema.
 
 ### Learning / missing capability capture
@@ -138,13 +144,19 @@ answers instead of huge raw Dodo rows.
 ### Tests
 
 - Local test suite after sales comparison changes:
-  - `89 passed`
+  - `92 passed`
 
 ### Live checks
 
 - Public Cloudflare route for `GET /dodo/accounting/sales/summary` returns `200`.
 - Public Cloudflare route for `GET /dodo/accounting/sales/comparison` returns `200`.
 - Public OpenAPI schema includes `getDodoAccountingSalesComparison`.
+- Internal `POST /auth/kb/refresh` successfully created
+  `dodopizza_info_session.json` from `dodopizza.info`.
+- Internal `POST /auth/kb/status` returned `ok: true` for the saved Knowledge
+  Base session.
+- Public Cloudflare `/auth/kb` remains closed (`404`), so the KB auth workflow
+  is internal-only.
 - Small live sales summary query through the public URL returned correct compact
   totals.
 - Small live sales comparison query for one pizzeria returned current, baseline,
@@ -178,6 +190,8 @@ after the first calculation or scheduled refresh.
   dashboard, chart, payload, filters, formula, and expected output.
 - Some pizzerias can legitimately return zero rows for a period; the Bridge uses
   the pizzeria catalog to keep their names visible.
+- Dodo Knowledge Base authentication is now available, but no KB search/read
+  endpoint has been exposed to ChatGPT yet.
 
 ## Deferred
 
@@ -259,13 +273,34 @@ Initial candidates:
 - Showcase / laid-out quantity metrics if they exist only in Superset.
 - Kiosk and cashier identification metrics.
 
+### 5. Add read-only Knowledge Base retrieval
+
+Goal: let the agent answer policy/process questions from Dodo Knowledge Base
+without giving ChatGPT direct login or write/admin access.
+
+Implemented foundation:
+
+- Refresh and check a dedicated `dodopizza.info` session file through
+  `/auth/kb`.
+- Reuse OpenClaw mailbox access for MFA without printing codes.
+- Keep KB auth routes internal and outside the public ChatGPT Action schema.
+
+Remaining work:
+
+- Decide retrieval mode: targeted page fetch by URL, small crawler/index, or
+  search endpoint if the site exposes one.
+- Define allowed domains and maximum response size.
+- Add read-only `/knowledge-base/...` endpoints and tests.
+- Add only safe retrieval endpoints to ChatGPT OpenAPI after verification.
+
 ## Next Decision
 
 Recommended next implementation step:
 
 ```text
-Build the sales summary cache / pre-aggregation layer.
+Choose the next active track: finish sales cache scheduling, or add read-only
+Knowledge Base retrieval on top of the new KB session.
 ```
 
-Reason: it directly fixes the current slow path and makes the ChatGPT agent much
-more reliable for management questions.
+Reason: the sales cache fixes management metrics speed; KB retrieval unlocks
+policy/process answers from Dodo's closed documentation.

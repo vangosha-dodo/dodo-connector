@@ -92,6 +92,14 @@ class Settings(BaseSettings):
         default=180,
         validation_alias="DODO_AUTH_COMMAND_TIMEOUT_SECONDS",
     )
+    dodo_kb_auth_helper_command: str | None = Field(
+        default=None,
+        validation_alias="DODO_KB_AUTH_HELPER_COMMAND",
+    )
+    dodo_kb_auth_command_timeout_seconds: int = Field(
+        default=300,
+        validation_alias="DODO_KB_AUTH_COMMAND_TIMEOUT_SECONDS",
+    )
     dodo_office_manager_helper_command: str | None = Field(
         default=None,
         validation_alias="DODO_OFFICE_MANAGER_HELPER_COMMAND",
@@ -128,6 +136,7 @@ class Settings(BaseSettings):
     @field_validator(
         "superset_browser_helper_command",
         "dodo_auth_helper_command",
+        "dodo_kb_auth_helper_command",
         "dodo_office_manager_helper_command",
         mode="before",
     )

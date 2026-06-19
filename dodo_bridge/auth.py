@@ -20,24 +20,36 @@ class AuthCommandResult:
     error: str | None = None
 
 
-class DodoAuthCommandRunner:
-    def __init__(self, settings: Settings):
+class AuthCommandRunner:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        helper_command: str | None,
+        timeout_seconds: int,
+        missing_message: str,
+        env_action_name: str,
+    ):
         self.settings = settings
+        self.helper_command = helper_command
+        self.timeout_seconds = timeout_seconds
+        self.missing_message = missing_message
+        self.env_action_name = env_action_name
 
     async def run(self, action: str, code: str | None = None) -> AuthCommandResult:
-        if not self.settings.dodo_auth_helper_command:
+        if not self.helper_command:
             return AuthCommandResult(
                 configured=False,
                 ok=False,
                 action=action,
                 data={},
-                error="DODO_AUTH_HELPER_COMMAND is not configured",
+                error=self.missing_message,
             )
 
         argv = self._command_argv(action)
         input_text = f"{code}\n" if code else None
         env = dict(os.environ)
-        env["DODO_AUTH_BRIDGE_ACTION"] = action
+        env[self.env_action_name] = action
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -49,7 +61,7 @@ class DodoAuthCommandRunner:
             )
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(input_text.encode("utf-8") if input_text else None),
-                timeout=self.settings.dodo_auth_command_timeout_seconds,
+                timeout=self.timeout_seconds,
             )
         except TimeoutError:
             return AuthCommandResult(
@@ -86,7 +98,7 @@ class DodoAuthCommandRunner:
         )
 
     def _command_argv(self, action: str) -> list[str]:
-        command = self.settings.dodo_auth_helper_command or ""
+        command = self.helper_command or ""
         argv = shlex.split(command, posix=os.name != "nt")
         return [*argv, action]
 
@@ -101,3 +113,24 @@ class DodoAuthCommandRunner:
                 return json.loads(text[start + 1 :])
             raise
 
+
+class DodoAuthCommandRunner(AuthCommandRunner):
+    def __init__(self, settings: Settings):
+        super().__init__(
+            settings,
+            helper_command=settings.dodo_auth_helper_command,
+            timeout_seconds=settings.dodo_auth_command_timeout_seconds,
+            missing_message="DODO_AUTH_HELPER_COMMAND is not configured",
+            env_action_name="DODO_AUTH_BRIDGE_ACTION",
+        )
+
+
+class DodoKbAuthCommandRunner(AuthCommandRunner):
+    def __init__(self, settings: Settings):
+        super().__init__(
+            settings,
+            helper_command=settings.dodo_kb_auth_helper_command,
+            timeout_seconds=settings.dodo_kb_auth_command_timeout_seconds,
+            missing_message="DODO_KB_AUTH_HELPER_COMMAND is not configured",
+            env_action_name="DODO_KB_AUTH_BRIDGE_ACTION",
+        )

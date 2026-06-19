@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from dodo_bridge.auth_routes import settings_dep as auth_settings_dep
 from dodo_bridge.config import Settings
+from dodo_bridge.kb_auth_routes import settings_dep as kb_auth_settings_dep
 from dodo_bridge.main import app
 
 
@@ -76,10 +77,65 @@ def test_dodo_auth_submit_code_validates_format(tmp_path) -> None:
     assert response.status_code == 422
 
 
+def test_kb_auth_page_renders(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[kb_auth_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get("/auth/kb")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert "Dodo Knowledge Base authorization" in response.text
+    assert "Refresh KB session" in response.text
+
+
+def test_kb_auth_form_requires_bridge_key(tmp_path) -> None:
+    settings = make_settings(tmp_path, api_keys=["secret"])
+    app.dependency_overrides[kb_auth_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.post("/auth/kb/status", data={})
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+
+
+def test_kb_auth_refresh_runs_helper(tmp_path) -> None:
+    helper = tmp_path / "fake_kb_auth_helper.py"
+    helper.write_text(
+        "import json, sys\n"
+        "action = sys.argv[1]\n"
+        "print(json.dumps({'ok': True, 'action': action, 'session_file': 'kb.json'}))\n",
+        encoding="utf-8",
+    )
+    settings = make_settings(
+        tmp_path,
+        api_keys=["secret"],
+        kb_helper_command=f"{sys.executable} {helper}",
+    )
+    app.dependency_overrides[kb_auth_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/auth/kb/refresh",
+            data={"bridge_key": "secret"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert "&quot;action&quot;: &quot;refresh&quot;" in response.text
+    assert "&quot;session_file&quot;: &quot;kb.json&quot;" in response.text
+
+
 def make_settings(
     tmp_path: Path,
     api_keys: list[str] | None = None,
     helper_command: str | None = None,
+    kb_helper_command: str | None = None,
 ) -> Settings:
     return Settings(
         api_keys=api_keys or [],
@@ -87,4 +143,5 @@ def make_settings(
         policy_path=Path("configs/policy.example.yaml"),
         audit_db_path=tmp_path / "audit.sqlite3",
         dodo_auth_helper_command=helper_command,
+        dodo_kb_auth_helper_command=kb_helper_command,
     )
