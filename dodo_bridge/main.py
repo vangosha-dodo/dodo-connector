@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 import yaml
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 
 from dodo_bridge.audit import AuditStore
 from dodo_bridge.analytics_routes import router as analytics_router
@@ -81,12 +81,46 @@ def health(settings: Settings = Depends(settings_dep)) -> dict[str, Any]:
     }
 
 
-@app.get("/chatgpt/openapi.yaml", include_in_schema=False)
-def chatgpt_openapi_yaml(request: Request) -> PlainTextResponse:
-    server_url = str(request.base_url).rstrip("/")
+def _first_forwarded_value(value: str | None) -> str | None:
+    if not value:
+        return None
+    return value.split(",", maxsplit=1)[0].strip() or None
+
+
+def _cloudflare_visitor_scheme(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        data = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    scheme = data.get("scheme")
+    return scheme if scheme in {"http", "https"} else None
+
+
+def _external_base_url(request: Request) -> str:
+    forwarded_proto = _cloudflare_visitor_scheme(
+        request.headers.get("cf-visitor")
+    ) or _first_forwarded_value(request.headers.get("x-forwarded-proto"))
+    forwarded_host = _first_forwarded_value(request.headers.get("x-forwarded-host"))
+    host = forwarded_host or request.headers.get("host")
+    if forwarded_proto and host:
+        return f"{forwarded_proto}://{host}".rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+@app.api_route("/chatgpt/openapi.yaml", methods=["GET", "HEAD"], include_in_schema=False)
+def chatgpt_openapi_yaml(request: Request) -> Response:
+    server_url = _external_base_url(request)
     schema = build_schema(server_url)
     body = yaml.dump(schema, Dumper=NoAliasSafeDumper, sort_keys=False, allow_unicode=True)
-    return PlainTextResponse(body, media_type="application/yaml")
+    media_type = "text/yaml"
+    if request.method == "HEAD":
+        return Response(
+            media_type=media_type,
+            headers={"Content-Length": str(len(body.encode("utf-8")))},
+        )
+    return PlainTextResponse(body, media_type=media_type)
 
 
 @app.get("/tools")

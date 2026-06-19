@@ -1,0 +1,24 @@
+{
+	auto_https off
+	admin off
+}
+
+http://:8001 {
+	bind 127.0.0.1
+	log {
+		output file /var/log/caddy/dodo-bridge-edge.log
+		format console
+	}
+	encode zstd gzip
+
+	@read_only_bridge path /health /chatgpt/* /dodo/* /analytics/* /system/*
+	handle @read_only_bridge {
+		reverse_proxy 127.0.0.1:8000 {
+			header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
+		}
+	}
+
+	handle {
+		respond "not found" 404
+	}
+}

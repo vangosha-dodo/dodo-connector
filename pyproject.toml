@@ -24,7 +24,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["dodo_bridge*"]
+include = ["dodo_bridge*", "scripts"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -1,6 +1,6 @@
 # Dodo ChatGPT Bridge - project status
 
-Updated: 2026-06-18
+Updated: 2026-06-19
 
 ## Goal
 
@@ -41,6 +41,9 @@ separate explicit enablement path.
 - Public ChatGPT Action schema URL:
   - `GET /chatgpt/openapi.yaml`
   - This generates the current read-only Action schema from Bridge code.
+  - The public route supports `HEAD`, gzip compression, and keeps the external
+    server URL as `https://dock-translations-investigated-basketball.trycloudflare.com`.
+- Caddy allowlist for the public tunnel is tracked in `deploy/caddy/Caddyfile`.
 - GitHub synchronization for the local project.
 
 ### Pizzeria catalog
