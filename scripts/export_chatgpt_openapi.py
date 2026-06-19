@@ -525,10 +525,9 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "operationId": "getDodoSliceWriteoffRate",
                     "summary": "Get slice write-off percent from laid-out quantity",
                     "description": (
-                        "Read Dodo IS product write-offs and accounting sales, then return a compact "
-                        "slice write-off rate by pizzeria. Use this for questions like 'списания кусочков "
-                        "в процентах от выложенного количества'. The Bridge computes laidOutQuantity as "
-                        "soldQuantity + writeoffQuantity and does not return raw sales or write-off rows."
+                        "Return compact slice write-off rate by pizzeria from read-only Dodo IS sales "
+                        "and product write-offs. Use for 'списания кусочков в процентах'. "
+                        "laidOutQuantity = soldQuantity + writeoffQuantity."
                     ),
                     "parameters": SLICE_WRITEOFF_RATE_PARAMETERS,
                     "responses": successful_response(

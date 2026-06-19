@@ -62,6 +62,15 @@ def test_chatgpt_openapi_object_schemas_have_properties() -> None:
     assert "BridgeObjectResponse" not in schema["components"]["schemas"]
 
 
+def test_chatgpt_openapi_operation_descriptions_fit_actions_limit() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    for path, path_item in schema["paths"].items():
+        for method, operation in path_item.items():
+            description = operation.get("description", "")
+            assert len(description) <= 300, f"{method.upper()} {path}"
+
+
 def test_chatgpt_openapi_includes_pizzeria_catalog() -> None:
     schema = build_schema("https://bridge.example.com")
 
