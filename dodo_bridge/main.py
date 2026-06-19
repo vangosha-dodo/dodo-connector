@@ -5,7 +5,9 @@ import time
 from typing import Any
 
 import httpx
+import yaml
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import PlainTextResponse
 
 from dodo_bridge.audit import AuditStore
 from dodo_bridge.analytics_routes import router as analytics_router
@@ -26,6 +28,7 @@ from dodo_bridge.policy import PolicyEngine
 from dodo_bridge.registry import ToolRegistry
 from dodo_bridge.security import authenticate_actor
 from dodo_bridge.system_routes import router as system_router
+from scripts.export_chatgpt_openapi import NoAliasSafeDumper, build_schema
 
 app = FastAPI(title="Dodo ChatGPT Bridge", version="0.1.0")
 app.include_router(analytics_router)
@@ -76,6 +79,14 @@ def health(settings: Settings = Depends(settings_dep)) -> dict[str, Any]:
         "tool_registry_path": str(settings.tool_registry_path),
         "policy_path": str(settings.policy_path),
     }
+
+
+@app.get("/openapi/chatgpt.yaml", include_in_schema=False)
+def chatgpt_openapi_yaml(request: Request) -> PlainTextResponse:
+    server_url = str(request.base_url).rstrip("/")
+    schema = build_schema(server_url)
+    body = yaml.dump(schema, Dumper=NoAliasSafeDumper, sort_keys=False, allow_unicode=True)
+    return PlainTextResponse(body, media_type="application/yaml")
 
 
 @app.get("/tools")
