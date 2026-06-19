@@ -66,6 +66,12 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         description="Accounting sales comparison between two periods.",
         row_keys=("sales", "items"),
     ),
+    "accounting_sales_channels_summary": DodoDataFunction(
+        name="accounting_sales_channels_summary",
+        tool_name="dodo_accounting_sales",
+        description="Accounting sales aggregation by sales channel and order source.",
+        row_keys=("sales", "items"),
+    ),
     "accounting_writeoffs_products": DodoDataFunction(
         name="accounting_writeoffs_products",
         tool_name="dodo_accounting_writeoffs_products",
@@ -573,6 +579,111 @@ class DodoDataService:
             ],
         }
 
+    async def fetch_sales_channels_summary(
+        self,
+        *,
+        parameters: dict[str, Any],
+        dry_run: bool,
+        take: int | None = None,
+        max_pages_per_unit: int | None = None,
+        concurrency: int | None = None,
+    ) -> dict[str, Any]:
+        function = FUNCTIONS["accounting_sales_channels_summary"]
+        tool = self._allowed_tool(function, parameters, dry_run)
+        unit_ids = normalize_units(str(parameters["units"])).split(",")
+        take_value = self._bounded_take(take or self.settings.dodo_data_max_take)
+        max_pages_value = _bounded_sales_summary_max_pages(max_pages_per_unit)
+        concurrency_value = _bounded_sales_summary_concurrency(concurrency, len(unit_ids))
+        base_params = dict(parameters)
+        days = _sales_summary_days(parameters)
+
+        if dry_run:
+            requests_preview = []
+            for unit_id in unit_ids[:10]:
+                request_params = {
+                    **base_params,
+                    "units": unit_id,
+                    "skip": 0,
+                    "take": take_value,
+                }
+                requests_preview.append(
+                    {
+                        "unitId": unit_id,
+                        "request": self.connector.build_request(tool, request_params),
+                    }
+                )
+            return {
+                "function": "accounting_sales_channels_summary",
+                "tool_name": tool.name,
+                "dry_run": True,
+                "request_count": len(unit_ids),
+                "requests_preview": requests_preview,
+                "pagination": {
+                    "take": take_value,
+                    "max_pages_per_unit": max_pages_value,
+                    "concurrency": concurrency_value,
+                },
+            }
+
+        unit_names = self._unit_names_by_id()
+        semaphore = asyncio.Semaphore(concurrency_value)
+        unit_results = await asyncio.gather(
+            *(
+                self._fetch_sales_channels_summary_for_unit(
+                    tool=tool,
+                    base_params=base_params,
+                    unit_id=unit_id,
+                    unit_name=unit_names.get(unit_id),
+                    take=take_value,
+                    max_pages=max_pages_value,
+                    days_count=len(days),
+                    semaphore=semaphore,
+                )
+                for unit_id in unit_ids
+            )
+        )
+
+        z_scores = _sales_channel_z_scores(unit_results)
+        for unit in unit_results:
+            unit["zScores"] = z_scores.get(unit["unitId"], {})
+
+        total = _new_sales_channel_bucket()
+        pages_fetched = 0
+        truncated_units = []
+        for unit in unit_results:
+            _add_sales_channel_bucket(total, unit["total"])
+            pages_fetched += int(unit["source"]["pagesFetched"])
+            if unit["source"]["truncated"]:
+                truncated_units.append({"unitId": unit["unitId"], "unitName": unit.get("unitName")})
+
+        unit_results.sort(key=lambda item: item.get("unitName") or item["unitId"])
+        return {
+            "function": "accounting_sales_channels_summary",
+            "tool_name": tool.name,
+            "period": {
+                "from": str(parameters.get("from")),
+                "to": str(parameters.get("to")),
+                "to_is_exclusive": True,
+                "days": len(days),
+            },
+            "complete": not truncated_units,
+            "total": _finalize_sales_channel_bucket(total, len(days)),
+            "units": unit_results,
+            "source": {
+                "rawRowsAggregated": int(total["orders"]),
+                "pagesFetched": pages_fetched,
+                "take": take_value,
+                "maxPagesPerUnit": max_pages_value,
+                "concurrency": concurrency_value,
+                "truncatedUnits": truncated_units,
+            },
+            "notes": [
+                "salesChannel comes from Dodo accounting sales rows.",
+                "orderSource separates Kiosk, MobileApp, Website, CallCenter, and Dine-in when Dodo provides it.",
+                "zScores compare each pizzeria's average orders per day against the configured pizzeria set for the same channel.",
+            ],
+        }
+
     async def fetch_slice_writeoff_rate(
         self,
         *,
@@ -852,6 +963,67 @@ class DodoDataService:
                 for day, daily_bucket in sorted(daily_buckets.items())
             ]
             return bucket
+
+    async def _fetch_sales_channels_summary_for_unit(
+        self,
+        *,
+        tool: ToolSpec,
+        base_params: dict[str, Any],
+        unit_id: str,
+        unit_name: str | None,
+        take: int,
+        max_pages: int,
+        days_count: int,
+        semaphore: asyncio.Semaphore,
+    ) -> dict[str, Any]:
+        async with semaphore:
+            total = _new_sales_channel_bucket()
+            sales_channels: dict[str, dict[str, Any]] = {}
+            order_sources: dict[str, dict[str, Any]] = {}
+            rows_key: str | None = None
+            pages_fetched = 0
+            truncated = False
+            for page in range(max_pages):
+                page_params = {
+                    **base_params,
+                    "units": unit_id,
+                    "skip": page * take,
+                    "take": take,
+                }
+                payload = await self._invoke_tool(tool, page_params)
+                current_key, rows = extract_rows(payload, FUNCTIONS["accounting_sales"].row_keys)
+                if rows is None:
+                    raise HTTPException(
+                        status_code=502,
+                        detail={
+                            "error": "unexpected_external_response",
+                            "tool_name": tool.name,
+                            "unitId": unit_id,
+                        },
+                    )
+                rows_key = rows_key or current_key
+                pages_fetched += 1
+                _add_sales_channel_rows(total, sales_channels, order_sources, rows)
+                if len(rows) < take:
+                    break
+            else:
+                truncated = True
+
+            name = str(total.get("unitName") or unit_name or "")
+            return {
+                "unitId": unit_id,
+                "unitName": name or None,
+                "total": _finalize_sales_channel_bucket(total, days_count),
+                "salesChannels": _finalize_named_sales_buckets(sales_channels, days_count, "salesChannel"),
+                "orderSources": _finalize_named_sales_buckets(order_sources, days_count, "orderSource"),
+                "kioskShare": _kiosk_share(order_sources, sales_channels),
+                "source": {
+                    "rowsKey": rows_key,
+                    "pagesFetched": pages_fetched,
+                    "truncated": truncated,
+                    "nextSkip": pages_fetched * take if truncated else None,
+                },
+            }
 
     def _unit_names_by_id(self) -> dict[str, str]:
         pizzerias = load_pizzerias(self.settings.dodo_pizzerias_path).get("pizzerias", [])
@@ -1407,6 +1579,221 @@ def _finalize_sales_summary_bucket(bucket: dict[str, Any]) -> dict[str, Any]:
     if "source" in bucket:
         result["source"] = bucket["source"]
     return result
+
+
+def _new_sales_channel_bucket() -> dict[str, Any]:
+    return {
+        "orders": 0,
+        "products": 0,
+        "salesWithDiscount": 0.0,
+        "salesWithoutDiscount": 0.0,
+    }
+
+
+def _sales_row_product_metrics(row: dict[str, Any]) -> tuple[int, float, float]:
+    products_count = 0
+    sales_with_discount = 0.0
+    sales_without_discount = 0.0
+    products = row.get("products")
+    if isinstance(products, list):
+        for product in products:
+            if not isinstance(product, dict):
+                continue
+            products_count += 1
+            sales_with_discount += _as_float(product.get("priceWithDiscount"))
+            sales_without_discount += _as_float(product.get("price"))
+    return products_count, sales_with_discount, sales_without_discount
+
+
+def _add_sales_channel_rows(
+    total: dict[str, Any],
+    sales_channels: dict[str, dict[str, Any]],
+    order_sources: dict[str, dict[str, Any]],
+    rows: list[Any],
+) -> None:
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if row.get("unitId"):
+            total["unitId"] = row["unitId"]
+        if row.get("unitName"):
+            total["unitName"] = row["unitName"]
+
+        products_count, sales_with_discount, sales_without_discount = _sales_row_product_metrics(row)
+        _add_sales_row_metrics(
+            total,
+            orders=1,
+            products=products_count,
+            sales_with_discount=sales_with_discount,
+            sales_without_discount=sales_without_discount,
+        )
+
+        channel = _sales_dimension_value(row.get("salesChannel"), "Unknown")
+        channel_bucket = sales_channels.setdefault(channel, _new_sales_channel_bucket())
+        _add_sales_row_metrics(
+            channel_bucket,
+            orders=1,
+            products=products_count,
+            sales_with_discount=sales_with_discount,
+            sales_without_discount=sales_without_discount,
+        )
+
+        source = _sales_dimension_value(row.get("orderSource"), "Unknown")
+        source_bucket = order_sources.setdefault(source, _new_sales_channel_bucket())
+        _add_sales_row_metrics(
+            source_bucket,
+            orders=1,
+            products=products_count,
+            sales_with_discount=sales_with_discount,
+            sales_without_discount=sales_without_discount,
+        )
+
+
+def _sales_dimension_value(value: Any, fallback: str) -> str:
+    text = str(value or "").strip()
+    return text or fallback
+
+
+def _add_sales_channel_bucket(total: dict[str, Any], bucket: dict[str, Any]) -> None:
+    total["orders"] += int(bucket.get("orders") or 0)
+    total["products"] += int(bucket.get("products") or 0)
+    total["salesWithDiscount"] += _as_float(bucket.get("salesWithDiscount"))
+    total["salesWithoutDiscount"] += _as_float(bucket.get("salesWithoutDiscount"))
+
+
+def _finalize_sales_channel_bucket(bucket: dict[str, Any], days_count: int) -> dict[str, Any]:
+    result = _finalize_sales_summary_bucket(bucket)
+    result.pop("unitId", None)
+    result.pop("unitName", None)
+    result.pop("source", None)
+    result["averageOrdersPerDay"] = _round_metric(result["orders"] / days_count) if days_count else 0
+    return result
+
+
+def _finalize_named_sales_buckets(
+    buckets: dict[str, dict[str, Any]],
+    days_count: int,
+    name_key: str,
+) -> list[dict[str, Any]]:
+    result = []
+    for name in sorted(buckets):
+        result.append({name_key: name, **_finalize_sales_channel_bucket(buckets[name], days_count)})
+    return result
+
+
+def _kiosk_share(
+    order_sources: dict[str, dict[str, Any]],
+    sales_channels: dict[str, dict[str, Any]],
+) -> dict[str, int | float]:
+    kiosk = _find_sales_bucket(order_sources, "kiosk", "киоск")
+    restaurant = _find_sales_bucket(sales_channels, "dine-in", "dine in", "restaurant", "рест", "зал")
+    total = _new_sales_channel_bucket()
+    for bucket in order_sources.values():
+        _add_sales_channel_bucket(total, bucket)
+
+    return {
+        "orders": int(kiosk.get("orders") or 0),
+        "salesWithDiscount": _round_metric(_as_float(kiosk.get("salesWithDiscount"))),
+        "shareOfRestaurantOrdersPercent": _percent(
+            _as_float(kiosk.get("orders")),
+            _as_float(restaurant.get("orders")),
+        ),
+        "shareOfRestaurantSalesPercent": _percent(
+            _as_float(kiosk.get("salesWithDiscount")),
+            _as_float(restaurant.get("salesWithDiscount")),
+        ),
+        "shareOfAllOrdersPercent": _percent(
+            _as_float(kiosk.get("orders")),
+            _as_float(total.get("orders")),
+        ),
+        "shareOfAllSalesPercent": _percent(
+            _as_float(kiosk.get("salesWithDiscount")),
+            _as_float(total.get("salesWithDiscount")),
+        ),
+    }
+
+
+def _find_sales_bucket(buckets: dict[str, dict[str, Any]], *needles: str) -> dict[str, Any]:
+    normalized_needles = tuple(needle.casefold() for needle in needles)
+    for name, bucket in buckets.items():
+        normalized_name = name.casefold()
+        if any(needle in normalized_name for needle in normalized_needles):
+            return bucket
+    return _new_sales_channel_bucket()
+
+
+def _sales_channel_z_scores(unit_results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    unit_ids = [str(unit["unitId"]) for unit in unit_results]
+    unit_channel_values: dict[str, dict[str, float]] = {}
+    channels: set[str] = set()
+    for unit in unit_results:
+        channel_values = {
+            str(channel["salesChannel"]): _as_float(channel.get("averageOrdersPerDay"))
+            for channel in unit.get("salesChannels", [])
+            if isinstance(channel, dict) and channel.get("salesChannel")
+        }
+        unit_channel_values[str(unit["unitId"])] = channel_values
+        channels.update(channel_values)
+
+    total_values = {
+        str(unit["unitId"]): _as_float(unit.get("total", {}).get("averageOrdersPerDay"))
+        for unit in unit_results
+    }
+    total_scores = _z_score_map(total_values, unit_ids)
+    channel_scores = {
+        channel: _z_score_map(
+            {unit_id: unit_channel_values.get(unit_id, {}).get(channel, 0.0) for unit_id in unit_ids},
+            unit_ids,
+        )
+        for channel in sorted(channels)
+    }
+
+    result: dict[str, dict[str, Any]] = {}
+    for unit_id in unit_ids:
+        by_channel = [
+            {"salesChannel": channel, **scores[unit_id]}
+            for channel, scores in channel_scores.items()
+        ]
+        restaurant_score = _first_matching_channel_score(by_channel, "dine-in", "dine in", "restaurant", "рест", "зал")
+        delivery_score = _first_matching_channel_score(by_channel, "delivery", "достав")
+        result[unit_id] = {
+            "total": total_scores[unit_id],
+            "restaurantOrdersPerDayZScore": restaurant_score.get("zScore") if restaurant_score else None,
+            "deliveryOrdersPerDayZScore": delivery_score.get("zScore") if delivery_score else None,
+            "bySalesChannel": by_channel,
+        }
+    return result
+
+
+def _z_score_map(values_by_unit: dict[str, float], unit_ids: list[str]) -> dict[str, dict[str, int | float]]:
+    values = [values_by_unit.get(unit_id, 0.0) for unit_id in unit_ids]
+    count = len(values)
+    mean = sum(values) / count if count else 0.0
+    variance = sum((value - mean) ** 2 for value in values) / count if count else 0.0
+    standard_deviation = variance ** 0.5
+    result: dict[str, dict[str, int | float]] = {}
+    for unit_id in unit_ids:
+        value = values_by_unit.get(unit_id, 0.0)
+        z_score = 0.0 if standard_deviation == 0 else (value - mean) / standard_deviation
+        result[unit_id] = {
+            "averageOrdersPerDay": _round_metric(value),
+            "mean": _round_metric(mean),
+            "standardDeviation": _round_metric(standard_deviation),
+            "zScore": _round_metric(z_score),
+        }
+    return result
+
+
+def _first_matching_channel_score(
+    by_channel: list[dict[str, Any]],
+    *needles: str,
+) -> dict[str, Any] | None:
+    normalized_needles = tuple(needle.casefold() for needle in needles)
+    for item in by_channel:
+        channel = str(item.get("salesChannel") or "").casefold()
+        if any(needle in channel for needle in normalized_needles):
+            return item
+    return None
 
 
 def _sales_summary_metrics(value: Any) -> dict[str, int | float]:

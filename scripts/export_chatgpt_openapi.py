@@ -111,6 +111,8 @@ SALES_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
     ]
 )
 
+SALES_CHANNELS_PARAMETERS: list[dict[str, Any]] = SALES_SUMMARY_PARAMETERS[:-1]
+
 SALES_COMPARISON_PARAMETERS: list[dict[str, Any]] = (
     [COMPACT_UNITS_PARAMETER, *COMMON_PERIOD_PARAMETERS[1:3]]
     + [
@@ -539,6 +541,21 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ),
                 }
             },
+            "/dodo/accounting/sales/channels-summary": {
+                "get": {
+                    "operationId": "getDodoAccountingSalesChannelsSummary",
+                    "summary": "Get sales by channel and source",
+                    "description": (
+                        "Aggregate read-only sales by salesChannel and orderSource. "
+                        "Returns restaurant and delivery order z-scores plus kiosk share."
+                    ),
+                    "parameters": SALES_CHANNELS_PARAMETERS,
+                    "responses": successful_response(
+                        "Accounting sales channel and order source summary.",
+                        "#/components/schemas/DodoSalesChannelsSummaryResponse",
+                    ),
+                }
+            },
             "/dodo/accounting/writeoffs/products": {
                 "get": {
                     "operationId": "getDodoAccountingProductWriteoffs",
@@ -647,6 +664,10 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "DodoSalesSummaryTotal": dodo_sales_summary_total_schema(),
                 "DodoSalesSummaryUnit": dodo_sales_summary_unit_schema(),
                 "DodoSalesSummarySource": dodo_sales_summary_source_schema(),
+                "DodoSalesChannelsSummaryResponse": dodo_sales_channels_summary_response_schema(),
+                "DodoSalesChannelsUnit": dodo_sales_channels_unit_schema(),
+                "DodoSalesChannelBucket": dodo_sales_channel_bucket_schema(),
+                "DodoKioskShare": dodo_kiosk_share_schema(),
                 "DodoSalesComparisonResponse": dodo_sales_comparison_response_schema(),
                 "DodoSalesComparisonPeriod": dodo_sales_comparison_period_schema(),
                 "DodoSalesComparisonUnit": dodo_sales_comparison_unit_schema(),
@@ -1049,6 +1070,117 @@ def dodo_sales_summary_source_schema() -> dict[str, Any]:
                 "items": {"type": "string"},
             },
         },
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_channels_summary_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Compact read-only sales aggregation by sales channel and order source.",
+        "properties": {
+            "function": {"type": "string"},
+            "tool_name": {"type": "string"},
+            "dry_run": {"type": "boolean"},
+            "request_count": {"type": "integer"},
+            "requests_preview": {
+                "type": "array",
+                "items": {"type": "object", "additionalProperties": True},
+            },
+            "pagination": {"$ref": "#/components/schemas/DodoPagination"},
+            "period": {
+                "type": "object",
+                "properties": {
+                    "from": {"type": "string", "format": "date"},
+                    "to": {"type": "string", "format": "date"},
+                    "to_is_exclusive": {"type": "boolean"},
+                    "days": {"type": "integer"},
+                },
+                "additionalProperties": False,
+            },
+            "complete": {"type": "boolean"},
+            "total": {"$ref": "#/components/schemas/DodoSalesChannelBucket"},
+            "units": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoSalesChannelsUnit"},
+            },
+            "source": {"$ref": "#/components/schemas/DodoSalesSummarySource"},
+            "notes": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["function", "tool_name"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_channels_unit_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "unitId": {"type": "string"},
+            "unitName": {"type": "string"},
+            "total": {"$ref": "#/components/schemas/DodoSalesChannelBucket"},
+            "salesChannels": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoSalesChannelBucket"},
+            },
+            "orderSources": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoSalesChannelBucket"},
+            },
+            "kioskShare": {"$ref": "#/components/schemas/DodoKioskShare"},
+            "zScores": {
+                "type": "object",
+                "description": "Orders-per-day z-scores versus the selected pizzeria set.",
+                "properties": {},
+                "additionalProperties": True,
+            },
+            "source": {
+                "type": "object",
+                "properties": {
+                    "rowsKey": {"type": "string"},
+                    "pagesFetched": {"type": "integer"},
+                    "truncated": {"type": "boolean"},
+                    "nextSkip": {"type": "integer"},
+                },
+                "additionalProperties": False,
+            },
+        },
+        "required": ["unitId", "total", "salesChannels", "orderSources", "kioskShare", "zScores"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_channel_bucket_schema() -> dict[str, Any]:
+    schema = dodo_sales_summary_total_schema()
+    schema["properties"] = {
+        "salesChannel": {"type": "string"},
+        "orderSource": {"type": "string"},
+        **schema["properties"],
+        "averageOrdersPerDay": {"type": "number"},
+    }
+    schema["required"] = [*schema["required"], "averageOrdersPerDay"]
+    return schema
+
+
+def dodo_kiosk_share_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "orders": {"type": "integer"},
+            "salesWithDiscount": {"type": "number"},
+            "shareOfRestaurantOrdersPercent": {"type": "number"},
+            "shareOfRestaurantSalesPercent": {"type": "number"},
+            "shareOfAllOrdersPercent": {"type": "number"},
+            "shareOfAllSalesPercent": {"type": "number"},
+        },
+        "required": [
+            "orders",
+            "salesWithDiscount",
+            "shareOfRestaurantOrdersPercent",
+            "shareOfRestaurantSalesPercent",
+            "shareOfAllOrdersPercent",
+            "shareOfAllSalesPercent",
+        ],
         "additionalProperties": False,
     }
 

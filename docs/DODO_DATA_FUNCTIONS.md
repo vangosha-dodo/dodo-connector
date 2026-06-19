@@ -149,6 +149,35 @@ The response `source` block shows `dailyRowsHit`, `dailyRowsMissed`,
 `cacheWrites`, and `unitsFetchedLive`, so the agent can explain whether the
 answer came from cache or live Dodo API reads.
 
+### Accounting Sales Channels Summary
+
+```http
+GET /dodo/accounting/sales/channels-summary?from=2026-06-01&to=2026-06-30
+```
+
+Uses the same Dodo IS read-only accounting sales endpoint, but groups checks by
+`salesChannel` and `orderSource`. Prefer this endpoint for CVM report metrics
+based on order volume by restaurant/delivery channel and for kiosk share checks
+when Superset is not required.
+
+For all configured pizzerias, omit `units`. For a narrowed report, pass
+`units=<unit-id>`.
+
+Returned metrics:
+
+- `salesChannels` - per-pizzeria aggregation by `salesChannel`, for example
+  `Dine-in` and `Delivery`.
+- `orderSources` - per-pizzeria aggregation by `orderSource`, for example
+  `Kiosk`, `MobileApp`, `Website`, `CallCenter`, and `Dine-in`.
+- `kioskShare` - kiosk orders/sales and kiosk share of restaurant/all orders.
+- `zScores.restaurantOrdersPerDayZScore` - restaurant checks/day z-score versus
+  the selected pizzeria set.
+- `zScores.deliveryOrdersPerDayZScore` - delivery checks/day z-score versus the
+  selected pizzeria set.
+
+This endpoint does not use the daily sales cache because it needs dimensions
+that are not stored in the compact revenue cache.
+
 ### Product Write-offs
 
 ```http

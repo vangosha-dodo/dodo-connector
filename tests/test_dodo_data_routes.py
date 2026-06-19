@@ -24,6 +24,7 @@ def test_dodo_functions_list(tmp_path) -> None:
     assert "accounting_sales" in names
     assert "accounting_inventory_stocks" in names
     assert "accounting_slice_writeoff_rate" in names
+    assert "accounting_sales_channels_summary" in names
     assert "accounting_sales_comparison" in names
     assert "accounting_stock_consumptions_by_period" in names
     assert "accounting_writeoffs_products_summary" in names
@@ -194,6 +195,159 @@ def test_dodo_accounting_sales_summary_aggregates_by_unit(tmp_path, monkeypatch)
     ]
     assert payload["source"]["rawRowsAggregated"] == 3
     assert payload["source"]["pagesFetched"] == 3
+
+
+def test_dodo_accounting_sales_channels_summary_groups_sources_and_scores(tmp_path, monkeypatch) -> None:
+    rows_by_unit = {
+        "unit-1": [
+            {
+                "unitId": "unit-1",
+                "unitName": "Точка 1",
+                "salesChannel": "Dine-in",
+                "orderSource": "Dine-in",
+                "products": [{"price": 100, "priceWithDiscount": 100}],
+            },
+            {
+                "unitId": "unit-1",
+                "unitName": "Точка 1",
+                "salesChannel": "Dine-in",
+                "orderSource": "Kiosk",
+                "products": [{"price": 200, "priceWithDiscount": 180}],
+            },
+            {
+                "unitId": "unit-1",
+                "unitName": "Точка 1",
+                "salesChannel": "Delivery",
+                "orderSource": "MobileApp",
+                "products": [{"price": 150, "priceWithDiscount": 120}],
+            },
+        ],
+        "unit-2": [
+            {
+                "unitId": "unit-2",
+                "unitName": "Точка 2",
+                "salesChannel": "Dine-in",
+                "orderSource": "Kiosk",
+                "products": [{"price": 50, "priceWithDiscount": 40}],
+            },
+            {
+                "unitId": "unit-2",
+                "unitName": "Точка 2",
+                "salesChannel": "Delivery",
+                "orderSource": "MobileApp",
+                "products": [{"price": 60, "priceWithDiscount": 60}],
+            },
+            {
+                "unitId": "unit-2",
+                "unitName": "Точка 2",
+                "salesChannel": "Delivery",
+                "orderSource": "CallCenter",
+                "products": [{"price": 70, "priceWithDiscount": 70}],
+            },
+        ],
+    }
+
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        if parameters["skip"] != 0:
+            return {"sales": []}
+        return {"sales": rows_by_unit[parameters["units"]]}
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/sales/channels-summary",
+            params={
+                "units": "unit-1,unit-2",
+                "from": "2026-06-01",
+                "to": "2026-06-01",
+                "take": "100",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "accounting_sales_channels_summary"
+    assert payload["total"]["orders"] == 6
+    assert payload["total"]["salesWithDiscount"] == 570
+    assert payload["total"]["averageOrdersPerDay"] == 6
+    unit_1 = next(unit for unit in payload["units"] if unit["unitId"] == "unit-1")
+    unit_2 = next(unit for unit in payload["units"] if unit["unitId"] == "unit-2")
+
+    assert "unitId" not in unit_1["total"]
+    assert "unitName" not in unit_1["total"]
+    dine_in = next(channel for channel in unit_1["salesChannels"] if channel["salesChannel"] == "Dine-in")
+    delivery = next(channel for channel in unit_1["salesChannels"] if channel["salesChannel"] == "Delivery")
+    kiosk = next(source for source in unit_1["orderSources"] if source["orderSource"] == "Kiosk")
+    assert dine_in["orders"] == 2
+    assert delivery["orders"] == 1
+    assert kiosk["salesWithDiscount"] == 180
+    assert unit_1["kioskShare"]["shareOfRestaurantOrdersPercent"] == 50
+    assert unit_1["kioskShare"]["shareOfRestaurantSalesPercent"] == 64.3
+    assert unit_1["zScores"]["restaurantOrdersPerDayZScore"] == 1
+    assert unit_1["zScores"]["deliveryOrdersPerDayZScore"] == -1
+    assert unit_2["zScores"]["restaurantOrdersPerDayZScore"] == -1
+    assert unit_2["zScores"]["deliveryOrdersPerDayZScore"] == 1
+    assert payload["source"]["pagesFetched"] == 2
+
+
+def test_dodo_accounting_sales_channels_summary_defaults_to_all_pizzerias(tmp_path, monkeypatch) -> None:
+    pizzerias_path = tmp_path / "pizzerias.json"
+    pizzerias_path.write_text(
+        json.dumps(
+            [
+                {"id": "unit-1", "name": "Точка 1", "unitType": 1},
+                {"id": "unit-2", "name": "Точка 2", "unitType": 1},
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    calls = []
+
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        calls.append((parameters["units"], parameters["skip"]))
+        if parameters["skip"] != 0:
+            return {"sales": []}
+        return {
+            "sales": [
+                {
+                    "unitId": parameters["units"],
+                    "unitName": f"Name {parameters['units']}",
+                    "salesChannel": "Dine-in",
+                    "orderSource": "Kiosk",
+                    "products": [{"price": 100, "priceWithDiscount": 90}],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token", dodo_pizzerias_path=pizzerias_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/sales/channels-summary",
+            params={
+                "from": "2026-06-01",
+                "to": "2026-06-01",
+                "take": "100",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"]["orders"] == 2
+    assert {unit["unitId"] for unit in payload["units"]} == {"unit-1", "unit-2"}
+    assert calls == [("unit-1", 0), ("unit-2", 0)]
 
 
 def test_dodo_accounting_sales_summary_uses_cache_on_second_call(tmp_path, monkeypatch) -> None:

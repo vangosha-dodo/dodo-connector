@@ -77,6 +77,7 @@ separate explicit enablement path.
 - `GET /dodo/accounting/sales`
 - `GET /dodo/accounting/sales/summary`
 - `GET /dodo/accounting/sales/comparison`
+- `GET /dodo/accounting/sales/channels-summary`
 - `GET /dodo/accounting/writeoffs/products`
 - `GET /dodo/accounting/writeoffs/products/summary`
 - `GET /dodo/accounting/slices/writeoff-rate`
@@ -114,6 +115,12 @@ answers instead of huge raw Dodo rows.
   - Returns current, baseline, absolute change, percent change, and per-pizzeria
     deltas.
   - Uses the same read-only sales source and cache behavior as sales summary.
+- Sales channel/source summary:
+  - `GET /dodo/accounting/sales/channels-summary`
+  - Groups read-only accounting sales by `salesChannel` and `orderSource`.
+  - Returns restaurant and delivery checks/day z-scores for CVM analysis.
+  - Returns kiosk order/sales share from `orderSource=Kiosk`.
+  - `units` is optional; when omitted, Bridge uses all configured pizzerias.
 
 ### Superset read-only capabilities
 
@@ -147,14 +154,17 @@ answers instead of huge raw Dodo rows.
 
 ### Tests
 
-- Local test suite after sales comparison changes:
-  - `92 passed`
+- Local test suite after sales channel/source changes:
+  - `97 passed`
 
 ### Live checks
 
 - Public Cloudflare route for `GET /dodo/accounting/sales/summary` returns `200`.
 - Public Cloudflare route for `GET /dodo/accounting/sales/comparison` returns `200`.
+- Public Cloudflare route for `GET /dodo/accounting/sales/channels-summary`
+  returns `200`.
 - Public OpenAPI schema includes `getDodoAccountingSalesComparison`.
+- Public OpenAPI schema includes `getDodoAccountingSalesChannelsSummary`.
 - Internal `POST /auth/kb/refresh` successfully created
   `dodopizza_info_session.json` from `dodopizza.info`.
 - Internal `POST /auth/kb/status` returned `ok: true` for the saved Knowledge
@@ -166,6 +176,26 @@ answers instead of huge raw Dodo rows.
 - Small live sales comparison query for one pizzeria returned current, baseline,
   absolute change, and percent change.
 - Dodo OAuth token on the server was refreshed and synced into Bridge `.env`.
+
+### CVM report review
+
+The Google Sheet `Маркетинг - отчётность dodotm`, sheet `CVM влияние`, was
+reviewed. Primary metrics are tracked in `docs/CVM_REPORT_METRICS.md`.
+
+First implemented metric block:
+
+- restaurant checks/day z-score;
+- delivery checks/day z-score;
+- kiosk share from sales source/order source data.
+
+Blocked or pending metric blocks:
+
+- new clients and 30-day churn require Dodo `orders` scope or a Superset/web
+  recipe;
+- production/load metrics require `productionefficiency` scope or Superset/web
+  recipes;
+- discount category shares are next priority and need either Dodo sales discount
+  classification or a general Superset discount recipe.
 
 ### Example result
 
