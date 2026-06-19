@@ -100,6 +100,91 @@ tools:
     source_evidence:
       - OpenClaw April delivery scripts used delivery/statistics for unit delivery reporting.
 
+  - name: dodo_orders_clients_statistics
+    description: Read Dodo IS client statistics for new clients and churn metrics.
+    connector: dodo
+    method: GET
+    path: /dodopizza/{country}/orders/clients-statistics
+    risk_level: read
+    enabled: true
+    status: active
+    required_params:
+      - units
+      - fromDate
+      - toDate
+    allowed_query_params:
+      - units
+      - fromDate
+      - toDate
+      - skip
+      - take
+    max_response_chars: 30000
+    tags:
+      - api-priority
+      - clients
+      - cvm
+      - management
+    source_evidence:
+      - Live Dodo API probe returned 403 InsufficientScopes and allowed scope orders.
+      - Needed for CVM report metrics new client share and 30-day churn share.
+
+  - name: dodo_production_productivity
+    description: Read Dodo IS production productivity metrics by unit and period.
+    connector: dodo
+    method: GET
+    path: /dodopizza/{country}/production/productivity
+    risk_level: read
+    enabled: true
+    status: active
+    required_params:
+      - units
+      - from
+      - to
+    allowed_query_params:
+      - units
+      - from
+      - to
+      - skip
+      - take
+    max_response_chars: 30000
+    tags:
+      - api-priority
+      - production
+      - cvm
+      - management
+    source_evidence:
+      - Live Dodo API probe returned 403 InsufficientScopes and allowed scope productionefficiency.
+      - Needed for CVM report kitchen productivity load metrics.
+
+  - name: dodo_production_orders_handover_time
+    description: Read Dodo IS order handover time production metrics by unit and period.
+    connector: dodo
+    method: GET
+    path: /dodopizza/{country}/production/orders-handover-time
+    risk_level: read
+    enabled: true
+    status: active
+    required_params:
+      - units
+      - from
+      - to
+    allowed_query_params:
+      - units
+      - from
+      - to
+      - skip
+      - take
+    max_response_chars: 30000
+    tags:
+      - api-priority
+      - production
+      - cvm
+      - handover
+      - management
+    source_evidence:
+      - Live Dodo API probe returned 403 InsufficientScopes and allowed scope productionefficiency.
+      - Needed for CVM report handover and heat-shelf load metrics.
+
   - name: dodo_accounting_sales
     description: Read Dodo IS accounting sales for product/hour/unit summaries.
     connector: dodo

@@ -35,12 +35,15 @@ The sheet combines pizzeria/month dimensions with these source indicators:
      `Дисконт` tab still needs an approved Superset discount recipe.
 3. Client metrics.
    - Needed for new client share and 30-day churn.
-   - Direct Dodo API probe for `orders/clients-statistics` returned
-     `InsufficientScopes`; the current token needs the `orders` scope or a
-     Superset/web extraction recipe.
+   - Bridge route added as `GET /dodo/orders/clients-statistics`.
+   - Current access status: direct Dodo API probe returned `InsufficientScopes`;
+     the current token needs the `orders` scope or a Superset/web extraction
+     recipe.
 4. Production/load metrics.
    - Needed for kitchen productivity, handover time, and heat shelf time.
-   - Direct Dodo API probes for production endpoints returned
+   - Bridge routes added as `GET /dodo/production/productivity` and
+     `GET /dodo/production/orders-handover-time`.
+   - Current access status: direct Dodo API probes returned
      `InsufficientScopes`; the current token needs `productionefficiency` scope
      or Superset/web extraction recipes.
 5. Courier productivity.

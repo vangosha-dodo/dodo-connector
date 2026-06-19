@@ -32,17 +32,17 @@ Reviewed on 2026-06-16 against the current Bridge code and live Dodo API access.
 6. `new_clients_statistics`
    - Source: `GET /dodopizza/{country}/orders/clients-statistics`
    - Why: customer growth and marketing effectiveness.
-   - Status: blocked by missing Dodo scope `orders`; live check with `units`, `fromDate`, and `toDate` returned `403 InsufficientScopes`.
+   - Status: Bridge route added as `GET /dodo/orders/clients-statistics`; current Dodo token is still blocked by missing scope `orders`.
 
 7. `production_orders_handover_time`
    - Source: `GET /dodopizza/{country}/production/orders-handover-time`
    - Why: one of the strongest operational service-speed KPIs.
-   - Status: blocked by missing Dodo scope `productionefficiency`.
+   - Status: Bridge route added as `GET /dodo/production/orders-handover-time`; current Dodo token is still blocked by missing scope `productionefficiency`.
 
 8. `production_productivity`
    - Source: `GET /dodopizza/{country}/production/productivity`
    - Why: kitchen throughput and labor efficiency.
-   - Status: blocked by missing Dodo scope `productionefficiency`.
+   - Status: Bridge route added as `GET /dodo/production/productivity`; current Dodo token is still blocked by missing scope `productionefficiency`.
 
 9. `staff_schedules_forecast`
    - Source: `GET /dodopizza/{country}/staff/schedules/forecast`

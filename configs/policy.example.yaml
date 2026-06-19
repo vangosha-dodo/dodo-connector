@@ -5,6 +5,9 @@ allowed_tools:
   - dodo_staff_shifts
   - dodo_staff_vacancies_count
   - dodo_delivery_statistics
+  - dodo_orders_clients_statistics
+  - dodo_production_productivity
+  - dodo_production_orders_handover_time
   - dodo_accounting_sales
   - dodo_accounting_writeoffs_products
   - dodo_accounting_inventory_stocks

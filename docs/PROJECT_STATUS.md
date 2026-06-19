@@ -72,6 +72,9 @@ separate explicit enablement path.
 - `GET /dodo/functions`
 - `GET /dodo/delivery/courier-orders`
 - `GET /dodo/delivery/statistics`
+- `GET /dodo/orders/clients-statistics`
+- `GET /dodo/production/productivity`
+- `GET /dodo/production/orders-handover-time`
 - `GET /dodo/staff/shifts`
 - `GET /dodo/staff/vacancies/count`
 - `GET /dodo/accounting/sales`
@@ -97,6 +100,28 @@ answers instead of huge raw Dodo rows.
   - `GET /dodo/accounting/writeoffs/products/summary`
   - For questions like "списания кусочков по всем пиццериям".
   - `units` is optional; when omitted, Bridge uses all configured pizzerias.
+
+### CVM source probes behind scope checks
+
+These routes are exposed as read-only ChatGPT Actions so the agent can request
+the CVM metrics and receive a clear scope diagnostic when the current Dodo token
+is not allowed to read them.
+
+- Client statistics:
+  - `GET /dodo/orders/clients-statistics`
+  - Intended for new client share and 30-day churn share.
+  - Current Dodo token may return `InsufficientScopes`; required scope hint from
+    prior live probe: `orders`.
+- Production productivity:
+  - `GET /dodo/production/productivity`
+  - Intended for kitchen productivity/load metrics.
+  - Current Dodo token may return `InsufficientScopes`; required scope hint:
+    `productionefficiency`.
+- Production order handover time:
+  - `GET /dodo/production/orders-handover-time`
+  - Intended for handover and heat-shelf load metrics.
+  - Current Dodo token may return `InsufficientScopes`; required scope hint:
+    `productionefficiency`.
 - Slice write-off rate:
   - `GET /dodo/accounting/slices/writeoff-rate`
   - Computes write-offs as a percent of laid-out quantity.
@@ -163,8 +188,8 @@ answers instead of huge raw Dodo rows.
 
 ### Tests
 
-- Local test suite after sales discount category changes:
-  - `100 passed`
+- Local test suite after CVM source route changes:
+  - `105 passed`
 
 ### Live checks
 
@@ -174,9 +199,19 @@ answers instead of huge raw Dodo rows.
   returns `200`.
 - Public Cloudflare route for `GET /dodo/accounting/sales/discounts-summary`
   returns `200`.
+- Public Cloudflare route for `GET /dodo/orders/clients-statistics` returns
+  `200` with `status=blocked_by_scope` and required scope hint `orders` when
+  the current token lacks that scope.
+- Public Cloudflare routes for `GET /dodo/production/productivity` and
+  `GET /dodo/production/orders-handover-time` return `200` with
+  `status=blocked_by_scope` and required scope hint `productionefficiency` when
+  the current token lacks that scope.
 - Public OpenAPI schema includes `getDodoAccountingSalesComparison`.
 - Public OpenAPI schema includes `getDodoAccountingSalesChannelsSummary`.
 - Public OpenAPI schema includes `getDodoAccountingSalesDiscountsSummary`.
+- Public OpenAPI schema includes `getDodoOrdersClientsStatistics`,
+  `getDodoProductionProductivity`, and
+  `getDodoProductionOrdersHandoverTime`.
 - Internal `POST /auth/kb/refresh` successfully created
   `dodopizza_info_session.json` from `dodopizza.info`.
 - Internal `POST /auth/kb/status` returned `ok: true` for the saved Knowledge
@@ -203,10 +238,10 @@ First implemented metric block:
 
 Blocked or pending metric blocks:
 
-- new clients and 30-day churn require Dodo `orders` scope or a Superset/web
-  recipe;
-- production/load metrics require `productionefficiency` scope or Superset/web
-  recipes;
+- new clients and 30-day churn routes are ready but require Dodo `orders` scope
+  or a Superset/web recipe;
+- production/load routes are ready but require `productionefficiency` scope or
+  Superset/web recipes;
 - exact discount-tab parity still needs a general Superset discount recipe.
 
 ### Example result

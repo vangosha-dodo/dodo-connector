@@ -30,6 +30,9 @@ def test_dodo_functions_list(tmp_path) -> None:
     assert "accounting_stock_consumptions_by_period" in names
     assert "accounting_writeoffs_products_summary" in names
     assert "courier_orders" in names
+    assert "orders_clients_statistics" in names
+    assert "production_orders_handover_time" in names
+    assert "production_productivity" in names
     assert "ratings_customer_experience" in names
     assert "staff_vacancies_count" in names
     assert "units_month_goals" in names
@@ -60,6 +63,91 @@ def test_dodo_accounting_sales_dry_run(tmp_path) -> None:
     assert "/accounting/sales" in payload["request"]["url"]
     assert "to=2026-06-03" in payload["request"]["url"]
     assert "take=100" in payload["request"]["url"]
+
+
+def test_dodo_orders_clients_statistics_dry_run_uses_dodo_date_params(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/orders/clients-statistics",
+            params={
+                "units": "unit-1,unit-2",
+                "from": "2026-06-01",
+                "to": "2026-06-30",
+                "dry_run": "true",
+                "take": "100",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "orders_clients_statistics"
+    assert payload["dry_run"] is True
+    assert "/orders/clients-statistics" in payload["request"]["url"]
+    assert "units=unit-1%2Cunit-2" in payload["request"]["url"]
+    assert "fromDate=2026-06-01" in payload["request"]["url"]
+    assert "toDate=2026-06-30" in payload["request"]["url"]
+    assert "take=100" in payload["request"]["url"]
+
+
+def test_dodo_production_productivity_dry_run(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/production/productivity",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-07",
+                "dry_run": "true",
+                "take": "50",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "production_productivity"
+    assert payload["dry_run"] is True
+    assert "/production/productivity" in payload["request"]["url"]
+    assert "from=2026-06-01" in payload["request"]["url"]
+    assert "to=2026-06-07" in payload["request"]["url"]
+    assert "take=50" in payload["request"]["url"]
+
+
+def test_dodo_production_orders_handover_time_dry_run(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/production/orders-handover-time",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-07",
+                "dry_run": "true",
+                "take": "50",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "production_orders_handover_time"
+    assert payload["dry_run"] is True
+    assert "/production/orders-handover-time" in payload["request"]["url"]
+    assert "from=2026-06-01" in payload["request"]["url"]
+    assert "to=2026-06-07" in payload["request"]["url"]
+    assert "take=50" in payload["request"]["url"]
 
 
 def test_dodo_accounting_sales_paginates_and_projects(tmp_path, monkeypatch) -> None:
@@ -1149,6 +1237,52 @@ def test_dodo_data_external_http_error_returns_controlled_response(tmp_path, mon
     assert detail["external_code"] == "ValidationError"
     assert detail["external_message"] == "Bad query"
     assert detail["external_details"]["errors"][0]["message"] == "From should be less than To."
+
+
+def test_dodo_data_external_insufficient_scopes_reports_scope_hint(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, parameters, dry_run
+        request = httpx.Request("GET", "https://api.dodois.io/example")
+        response = httpx.Response(
+            403,
+            json={
+                "code": "InsufficientScopes",
+                "message": "Insufficient scopes.",
+                "details": {"allowedScope": "orders"},
+            },
+            request=request,
+        )
+        raise httpx.HTTPStatusError("Forbidden", request=request, response=response)
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/orders/clients-statistics",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-30",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "orders_clients_statistics"
+    assert payload["status"] == "blocked_by_scope"
+    assert payload["read_only"] is True
+    assert payload["blocked"] is True
+    assert payload["required_scope_hint"] == "orders"
+    detail = payload["detail"]
+    assert detail["error"] == "external_insufficient_scopes"
+    assert detail["tool_name"] == "dodo_orders_clients_statistics"
+    assert detail["external_status"] == 403
+    assert detail["external_code"] == "InsufficientScopes"
+    assert detail["required_scope_hint"] == "orders"
 
 
 def test_dodo_data_external_timeout_returns_gateway_timeout(tmp_path, monkeypatch) -> None:

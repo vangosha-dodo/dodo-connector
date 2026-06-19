@@ -54,6 +54,24 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         row_keys=("unitsStatistics", "deliveryStatistics", "statistics", "items"),
         paginated=False,
     ),
+    "orders_clients_statistics": DodoDataFunction(
+        name="orders_clients_statistics",
+        tool_name="dodo_orders_clients_statistics",
+        description="Client statistics for new clients and churn metrics.",
+        row_keys=("clientsStatistics", "clientStatistics", "statistics", "items"),
+    ),
+    "production_productivity": DodoDataFunction(
+        name="production_productivity",
+        tool_name="dodo_production_productivity",
+        description="Production productivity metrics by unit and period.",
+        row_keys=("unitsProductivity", "productivity", "statistics", "items"),
+    ),
+    "production_orders_handover_time": DodoDataFunction(
+        name="production_orders_handover_time",
+        tool_name="dodo_production_orders_handover_time",
+        description="Production order handover time metrics by unit and period.",
+        row_keys=("ordersHandoverTime", "handoverTimes", "statistics", "items"),
+    ),
     "accounting_sales": DodoDataFunction(
         name="accounting_sales",
         tool_name="dodo_accounting_sales",
@@ -2419,10 +2437,36 @@ def external_http_error_detail(exc: httpx.HTTPStatusError, tool_name: str) -> di
             detail["external_message"] = message
         if details:
             detail["external_details"] = details
+        if str(code).casefold() == "insufficientscopes":
+            detail["error"] = "external_insufficient_scopes"
+            scope_hint = _extract_scope_hint(details)
+            if scope_hint:
+                detail["required_scope_hint"] = scope_hint
     elif payload:
         detail["external_body_preview"] = str(payload)[:500]
 
     return detail
+
+
+def _extract_scope_hint(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in ("allowedScope", "allowedScopes", "requiredScope", "requiredScopes", "scope", "scopes"):
+            if value.get(key):
+                return str(value[key])
+        for item in value.values():
+            hint = _extract_scope_hint(item)
+            if hint:
+                return hint
+    if isinstance(value, list):
+        for item in value:
+            hint = _extract_scope_hint(item)
+            if hint:
+                return hint
+    return None
 
 
 def external_request_error_detail(

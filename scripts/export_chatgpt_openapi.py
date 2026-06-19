@@ -262,6 +262,11 @@ OPTIONAL_UNIT_COUNTRY_PARAMETERS: list[dict[str, Any]] = [
     },
 ]
 
+OPTIONAL_UNITS_PERIOD_PARAMETERS: list[dict[str, Any]] = (
+    [COMPACT_UNITS_PARAMETER, *COMMON_PERIOD_PARAMETERS[1:]]
+    + PAGINATION_PARAMETERS
+)
+
 WRITEOFF_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
     [COMPACT_UNITS_PARAMETER, *COMMON_PERIOD_PARAMETERS[1:3]]
     + [
@@ -514,6 +519,42 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "description": "Read Dodo IS delivery statistics for selected units and period.",
                     "parameters": COMMON_PERIOD_PARAMETERS,
                     "responses": data_response("Delivery statistics rows."),
+                }
+            },
+            "/dodo/orders/clients-statistics": {
+                "get": {
+                    "operationId": "getDodoOrdersClientsStatistics",
+                    "summary": "Get client statistics",
+                    "description": (
+                        "Read Dodo IS client statistics for new-client and churn metrics. "
+                        "May require the Dodo orders scope."
+                    ),
+                    "parameters": OPTIONAL_UNITS_PERIOD_PARAMETERS,
+                    "responses": data_response("Client statistics rows."),
+                }
+            },
+            "/dodo/production/productivity": {
+                "get": {
+                    "operationId": "getDodoProductionProductivity",
+                    "summary": "Get production productivity",
+                    "description": (
+                        "Read Dodo IS production productivity metrics by pizzeria and period. "
+                        "May require productionefficiency scope."
+                    ),
+                    "parameters": OPTIONAL_UNITS_PERIOD_PARAMETERS,
+                    "responses": data_response("Production productivity rows."),
+                }
+            },
+            "/dodo/production/orders-handover-time": {
+                "get": {
+                    "operationId": "getDodoProductionOrdersHandoverTime",
+                    "summary": "Get order handover time",
+                    "description": (
+                        "Read Dodo IS production order handover time metrics by pizzeria and period. "
+                        "May require productionefficiency scope."
+                    ),
+                    "parameters": OPTIONAL_UNITS_PERIOD_PARAMETERS,
+                    "responses": data_response("Order handover time rows."),
                 }
             },
             "/dodo/accounting/sales": {
@@ -952,6 +993,25 @@ def dodo_data_response_schema() -> dict[str, Any]:
         "properties": {
             "function": {"type": "string", "description": "Bridge function name."},
             "tool_name": {"type": "string", "description": "Internal Bridge tool id."},
+            "status": {
+                "type": "string",
+                "description": "Optional Bridge status, for example blocked_by_scope.",
+            },
+            "read_only": {"type": "boolean", "description": "True when the route performed no write action."},
+            "blocked": {"type": "boolean", "description": "True when the source could not be read."},
+            "required_scope_hint": {
+                "type": ["string", "null"],
+                "description": "Dodo scope hint when the source is blocked by token scope.",
+            },
+            "external_status": {"type": "integer", "description": "HTTP status returned by Dodo API."},
+            "external_code": {"type": "string", "description": "Error code returned by Dodo API."},
+            "message": {"type": "string", "description": "Human-readable Bridge status message."},
+            "detail": {
+                "type": "object",
+                "description": "Structured Bridge diagnostic detail.",
+                "properties": {},
+                "additionalProperties": True,
+            },
             "dry_run": {"type": "boolean", "description": "True when Dodo IS was not called."},
             "request": {"$ref": "#/components/schemas/DodoRequest"},
             "meta": {

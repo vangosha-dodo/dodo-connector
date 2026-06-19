@@ -205,6 +205,101 @@ async def delivery_statistics(
     )
 
 
+@router.get("/orders/clients-statistics")
+async def orders_clients_statistics(
+    units: str | None = Query(
+        default=None,
+        description="Optional comma-separated Dodo unit ids. Omit for all configured pizzerias.",
+    ),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    fields: str | None = Query(default=None, description="Optional comma-separated row fields."),
+    take: int | None = Query(default=None, ge=1),
+    max_pages: int | None = Query(default=None, ge=1),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _date_params(
+        context.settings,
+        _units_or_all_pizzerias(context.settings, units),
+        from_date,
+        to_date,
+        from_key="fromDate",
+        to_key="toDate",
+    )
+    return await _fetch_scope_aware(
+        context,
+        function_name="orders_clients_statistics",
+        parameters=params,
+        dry_run=dry_run,
+        fields=fields,
+        take=take,
+        max_pages=max_pages,
+    )
+
+
+@router.get("/production/productivity")
+async def production_productivity(
+    units: str | None = Query(
+        default=None,
+        description="Optional comma-separated Dodo unit ids. Omit for all configured pizzerias.",
+    ),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    fields: str | None = Query(default=None, description="Optional comma-separated row fields."),
+    take: int | None = Query(default=None, ge=1),
+    max_pages: int | None = Query(default=None, ge=1),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _period_params(
+        context.settings,
+        _units_or_all_pizzerias(context.settings, units),
+        from_date,
+        to_date,
+    )
+    return await _fetch_scope_aware(
+        context,
+        function_name="production_productivity",
+        parameters=params,
+        dry_run=dry_run,
+        fields=fields,
+        take=take,
+        max_pages=max_pages,
+    )
+
+
+@router.get("/production/orders-handover-time")
+async def production_orders_handover_time(
+    units: str | None = Query(
+        default=None,
+        description="Optional comma-separated Dodo unit ids. Omit for all configured pizzerias.",
+    ),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    fields: str | None = Query(default=None, description="Optional comma-separated row fields."),
+    take: int | None = Query(default=None, ge=1),
+    max_pages: int | None = Query(default=None, ge=1),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _period_params(
+        context.settings,
+        _units_or_all_pizzerias(context.settings, units),
+        from_date,
+        to_date,
+    )
+    return await _fetch_scope_aware(
+        context,
+        function_name="production_orders_handover_time",
+        parameters=params,
+        dry_run=dry_run,
+        fields=fields,
+        take=take,
+        max_pages=max_pages,
+    )
+
+
 @router.get("/accounting/sales")
 async def accounting_sales(
     units: str = Query(..., description="Comma-separated Dodo unit ids."),
@@ -712,6 +807,25 @@ def _period_params(
     }
 
 
+def _date_params(
+    settings: Settings,
+    units: str,
+    from_date: date,
+    to_date: date,
+    *,
+    from_key: str,
+    to_key: str,
+    exclusive_to: bool = False,
+) -> dict[str, Any]:
+    validate_period(from_date, to_date, settings)
+    api_to_date = to_date + timedelta(days=1) if exclusive_to else to_date
+    return {
+        "units": normalize_units(units),
+        from_key: from_date.isoformat(),
+        to_key: api_to_date.isoformat(),
+    }
+
+
 def _units_or_all_pizzerias(settings: Settings, units: str | None) -> str:
     if units:
         return normalize_units(units)
@@ -772,6 +886,59 @@ async def _fetch(
         result=result,
     )
     return result
+
+
+async def _fetch_scope_aware(
+    context: RouteContext,
+    *,
+    function_name: str,
+    parameters: dict[str, Any],
+    dry_run: bool,
+    fields: str | None,
+    take: int | None,
+    max_pages: int | None,
+) -> dict[str, Any]:
+    try:
+        return await _fetch(
+            context,
+            function_name=function_name,
+            parameters=parameters,
+            dry_run=dry_run,
+            fields=fields,
+            take=take,
+            max_pages=max_pages,
+        )
+    except HTTPException as exc:
+        detail = exc.detail
+        if not (
+            exc.status_code == 502
+            and isinstance(detail, dict)
+            and detail.get("error") == "external_insufficient_scopes"
+        ):
+            raise
+        result = {
+            "function": function_name,
+            "tool_name": detail.get("tool_name"),
+            "status": "blocked_by_scope",
+            "read_only": True,
+            "blocked": True,
+            "required_scope_hint": detail.get("required_scope_hint"),
+            "external_status": detail.get("external_status"),
+            "external_code": detail.get("external_code"),
+            "message": "Dodo API token does not have the required read scope for this source.",
+            "detail": detail,
+        }
+        _record_dodo_audit(
+            context,
+            function_name=function_name,
+            parameters=parameters,
+            dry_run=dry_run,
+            fields=fields,
+            take=take,
+            max_pages=max_pages,
+            result=result,
+        )
+        return result
 
 
 def _record_dodo_audit(

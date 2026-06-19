@@ -20,6 +20,9 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
         "/dodo/staff/shifts",
         "/dodo/staff/vacancies/count",
         "/dodo/delivery/statistics",
+        "/dodo/orders/clients-statistics",
+        "/dodo/production/productivity",
+        "/dodo/production/orders-handover-time",
         "/dodo/accounting/sales",
         "/dodo/accounting/sales/summary",
         "/dodo/accounting/sales/comparison",
@@ -144,6 +147,25 @@ def test_chatgpt_openapi_includes_inventory_stocks() -> None:
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/DodoDataResponse"
     }
+
+
+def test_chatgpt_openapi_includes_clients_and_production_routes() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    clients = schema["paths"]["/dodo/orders/clients-statistics"]["get"]
+    productivity = schema["paths"]["/dodo/production/productivity"]["get"]
+    handover = schema["paths"]["/dodo/production/orders-handover-time"]["get"]
+    assert clients["operationId"] == "getDodoOrdersClientsStatistics"
+    assert productivity["operationId"] == "getDodoProductionProductivity"
+    assert handover["operationId"] == "getDodoProductionOrdersHandoverTime"
+    for operation in (clients, productivity, handover):
+        parameter_names = {item["name"] for item in operation["parameters"]}
+        assert {"units", "from", "to", "fields", "dry_run", "take", "max_pages"} <= parameter_names
+        units_param = next(item for item in operation["parameters"] if item["name"] == "units")
+        assert units_param["required"] is False
+        assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/DodoDataResponse"
+        }
 
 
 def test_chatgpt_openapi_includes_sales_summary() -> None:

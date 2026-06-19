@@ -98,6 +98,66 @@ Uses:
 GET /dodopizza/{country}/delivery/statistics
 ```
 
+### Orders Clients Statistics
+
+```http
+GET /dodo/orders/clients-statistics?from=2026-06-01&to=2026-06-30
+```
+
+Uses:
+
+```text
+GET /dodopizza/{country}/orders/clients-statistics
+```
+
+This route is intended for CVM report metrics such as new client share and
+30-day churn share. The public Bridge route accepts `from` and `to`, then sends
+Dodo API `fromDate` and `toDate`.
+
+For all configured pizzerias, omit `units`. For a narrowed report, pass
+`units=<unit-id>`.
+
+Current access note: previous live probes returned Dodo `InsufficientScopes`
+with required scope hint `orders`. The route is still exposed as read-only so it
+will start working after the Dodo token receives the required scope or when an
+approved Superset/web recipe replaces the source.
+
+### Production Productivity
+
+```http
+GET /dodo/production/productivity?from=2026-06-01&to=2026-06-30
+```
+
+Uses:
+
+```text
+GET /dodopizza/{country}/production/productivity
+```
+
+This route is intended for CVM kitchen productivity/load metrics. For all
+configured pizzerias, omit `units`.
+
+Current access note: previous live probes returned Dodo `InsufficientScopes`
+with required scope hint `productionefficiency`.
+
+### Production Orders Handover Time
+
+```http
+GET /dodo/production/orders-handover-time?from=2026-06-01&to=2026-06-30
+```
+
+Uses:
+
+```text
+GET /dodopizza/{country}/production/orders-handover-time
+```
+
+This route is intended for CVM handover/heat-shelf load metrics. For all
+configured pizzerias, omit `units`.
+
+Current access note: previous live probes returned Dodo `InsufficientScopes`
+with required scope hint `productionefficiency`.
+
 ### Accounting Sales
 
 ```http
