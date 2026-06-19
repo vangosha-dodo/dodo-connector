@@ -103,6 +103,28 @@ SALES_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
     ]
 )
 
+SALES_COMPARISON_PARAMETERS: list[dict[str, Any]] = (
+    COMMON_PERIOD_PARAMETERS[:3]
+    + [
+        {
+            "name": "compareFrom",
+            "in": "query",
+            "required": True,
+            "description": "Baseline period start date, inclusive, in YYYY-MM-DD format.",
+            "schema": {"type": "string", "format": "date"},
+        },
+        {
+            "name": "compareTo",
+            "in": "query",
+            "required": True,
+            "description": "Baseline period end date, inclusive, in YYYY-MM-DD format.",
+            "schema": {"type": "string", "format": "date"},
+        },
+        COMMON_PERIOD_PARAMETERS[4],
+        *SALES_SUMMARY_PARAMETERS[4:],
+    ]
+)
+
 RATINGS_PARAMETERS: list[dict[str, Any]] = [
     {
         "name": "units",
@@ -494,6 +516,21 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ),
                 }
             },
+            "/dodo/accounting/sales/comparison": {
+                "get": {
+                    "operationId": "getDodoAccountingSalesComparison",
+                    "summary": "Compare sales revenue periods",
+                    "description": (
+                        "Compare compact read-only sales totals for two periods by pizzeria. "
+                        "Use for questions like 'выручка в мае к апрелю' or 'где просели продажи'."
+                    ),
+                    "parameters": SALES_COMPARISON_PARAMETERS,
+                    "responses": successful_response(
+                        "Accounting sales comparison between two periods.",
+                        "#/components/schemas/DodoSalesComparisonResponse",
+                    ),
+                }
+            },
             "/dodo/accounting/writeoffs/products": {
                 "get": {
                     "operationId": "getDodoAccountingProductWriteoffs",
@@ -602,6 +639,10 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "DodoSalesSummaryTotal": dodo_sales_summary_total_schema(),
                 "DodoSalesSummaryUnit": dodo_sales_summary_unit_schema(),
                 "DodoSalesSummarySource": dodo_sales_summary_source_schema(),
+                "DodoSalesComparisonResponse": dodo_sales_comparison_response_schema(),
+                "DodoSalesComparisonPeriod": dodo_sales_comparison_period_schema(),
+                "DodoSalesComparisonUnit": dodo_sales_comparison_unit_schema(),
+                "DodoSalesMetricChange": dodo_sales_metric_change_schema(),
                 "DodoWriteoffSummaryResponse": dodo_writeoff_summary_response_schema(),
                 "DodoWriteoffSummarySource": dodo_writeoff_summary_source_schema(),
                 "DodoWriteoffSummaryFilter": dodo_writeoff_summary_filter_schema(),
@@ -931,8 +972,16 @@ def dodo_sales_summary_total_schema() -> dict[str, Any]:
             "salesWithDiscount": {"type": "number"},
             "salesWithoutDiscount": {"type": "number"},
             "discount": {"type": "number"},
+            "averageCheck": {"type": "number"},
         },
-        "required": ["orders", "products", "salesWithDiscount", "salesWithoutDiscount", "discount"],
+        "required": [
+            "orders",
+            "products",
+            "salesWithDiscount",
+            "salesWithoutDiscount",
+            "discount",
+            "averageCheck",
+        ],
         "additionalProperties": False,
     }
 
@@ -992,6 +1041,97 @@ def dodo_sales_summary_source_schema() -> dict[str, Any]:
                 "items": {"type": "string"},
             },
         },
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_comparison_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Compact read-only sales comparison between two periods.",
+        "properties": {
+            "function": {"type": "string"},
+            "tool_name": {"type": "string"},
+            "dry_run": {"type": "boolean"},
+            "current": {"$ref": "#/components/schemas/DodoSalesComparisonPeriod"},
+            "baseline": {"$ref": "#/components/schemas/DodoSalesComparisonPeriod"},
+            "complete": {"type": "boolean"},
+            "change": {"$ref": "#/components/schemas/DodoSalesMetricChange"},
+            "changePercent": {"$ref": "#/components/schemas/DodoSalesMetricChange"},
+            "units": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoSalesComparisonUnit"},
+            },
+            "source": {
+                "type": "object",
+                "properties": {
+                    "current": {"$ref": "#/components/schemas/DodoSalesSummarySource"},
+                    "baseline": {"$ref": "#/components/schemas/DodoSalesSummarySource"},
+                },
+                "additionalProperties": False,
+            },
+            "notes": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["function", "tool_name"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_comparison_period_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "period": {
+                "type": "object",
+                "properties": {
+                    "from": {"type": "string", "format": "date"},
+                    "to": {"type": "string", "format": "date"},
+                    "to_is_exclusive": {"type": "boolean"},
+                },
+                "additionalProperties": False,
+            },
+            "total": {"$ref": "#/components/schemas/DodoSalesSummaryTotal"},
+        },
+        "additionalProperties": True,
+    }
+
+
+def dodo_sales_comparison_unit_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "unitId": {"type": "string"},
+            "unitName": {"type": "string"},
+            "current": {"$ref": "#/components/schemas/DodoSalesSummaryTotal"},
+            "baseline": {"$ref": "#/components/schemas/DodoSalesSummaryTotal"},
+            "change": {"$ref": "#/components/schemas/DodoSalesMetricChange"},
+            "changePercent": {"$ref": "#/components/schemas/DodoSalesMetricChange"},
+        },
+        "required": ["unitId", "current", "baseline", "change", "changePercent"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_sales_metric_change_schema() -> dict[str, Any]:
+    value_schema = {"type": ["number", "null"]}
+    return {
+        "type": "object",
+        "properties": {
+            "orders": value_schema,
+            "products": value_schema,
+            "salesWithDiscount": value_schema,
+            "salesWithoutDiscount": value_schema,
+            "discount": value_schema,
+            "averageCheck": value_schema,
+        },
+        "required": [
+            "orders",
+            "products",
+            "salesWithDiscount",
+            "salesWithoutDiscount",
+            "discount",
+            "averageCheck",
+        ],
         "additionalProperties": False,
     }
 

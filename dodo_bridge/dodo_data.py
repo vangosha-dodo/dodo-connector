@@ -60,6 +60,12 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         description="Accounting sales rows.",
         row_keys=("sales", "items"),
     ),
+    "accounting_sales_comparison": DodoDataFunction(
+        name="accounting_sales_comparison",
+        tool_name="dodo_accounting_sales",
+        description="Accounting sales comparison between two periods.",
+        row_keys=("sales", "items"),
+    ),
     "accounting_writeoffs_products": DodoDataFunction(
         name="accounting_writeoffs_products",
         tool_name="dodo_accounting_writeoffs_products",
@@ -126,6 +132,14 @@ SALES_SUMMARY_MAX_PAGES_PER_UNIT = 200
 SALES_SUMMARY_DEFAULT_CONCURRENCY = 4
 SALES_SUMMARY_MAX_CONCURRENCY = 8
 SALES_SUMMARY_CACHE_MODES = {"auto", "refresh", "bypass"}
+SALES_SUMMARY_METRIC_KEYS = (
+    "orders",
+    "products",
+    "salesWithDiscount",
+    "salesWithoutDiscount",
+    "discount",
+    "averageCheck",
+)
 
 
 class DodoDataService:
@@ -483,6 +497,79 @@ class DodoDataService:
                 "salesWithoutDiscount is sum of products[].price.",
                 "discount is salesWithoutDiscount - salesWithDiscount.",
                 "Cancelled sales are not included; they are exposed by a separate Dodo API endpoint.",
+            ],
+        }
+
+    async def fetch_sales_comparison(
+        self,
+        *,
+        current_parameters: dict[str, Any],
+        baseline_parameters: dict[str, Any],
+        dry_run: bool,
+        take: int | None = None,
+        max_pages_per_unit: int | None = None,
+        concurrency: int | None = None,
+        cache_mode: str = "auto",
+    ) -> dict[str, Any]:
+        current = await self.fetch_sales_summary(
+            parameters=current_parameters,
+            dry_run=dry_run,
+            take=take,
+            max_pages_per_unit=max_pages_per_unit,
+            concurrency=concurrency,
+            cache_mode=cache_mode,
+        )
+        baseline = await self.fetch_sales_summary(
+            parameters=baseline_parameters,
+            dry_run=dry_run,
+            take=take,
+            max_pages_per_unit=max_pages_per_unit,
+            concurrency=concurrency,
+            cache_mode=cache_mode,
+        )
+        if dry_run:
+            return {
+                "function": "accounting_sales_comparison",
+                "tool_name": current.get("tool_name") or baseline.get("tool_name"),
+                "dry_run": True,
+                "current": current,
+                "baseline": baseline,
+                "notes": [
+                    "Dry-run only plans read-only Dodo IS accounting sales requests.",
+                    "Live mode compares two compact sales summaries inside the Bridge.",
+                ],
+            }
+
+        current_total = _sales_summary_metrics(current.get("total"))
+        baseline_total = _sales_summary_metrics(baseline.get("total"))
+        total_comparison = _compare_sales_metrics(current_total, baseline_total)
+
+        return {
+            "function": "accounting_sales_comparison",
+            "tool_name": current.get("tool_name") or baseline.get("tool_name"),
+            "complete": bool(current.get("complete")) and bool(baseline.get("complete")),
+            "current": {
+                "period": current.get("period"),
+                "total": current_total,
+            },
+            "baseline": {
+                "period": baseline.get("period"),
+                "total": baseline_total,
+            },
+            "change": total_comparison["change"],
+            "changePercent": total_comparison["changePercent"],
+            "units": _compare_sales_units(
+                current.get("units") if isinstance(current.get("units"), list) else [],
+                baseline.get("units") if isinstance(baseline.get("units"), list) else [],
+            ),
+            "source": {
+                "current": current.get("source"),
+                "baseline": baseline.get("source"),
+            },
+            "notes": [
+                "change = current - baseline.",
+                "changePercent is null when the baseline metric is zero.",
+                "averageCheck is salesWithDiscount / orders.",
             ],
         }
 
@@ -1302,14 +1389,16 @@ def _sales_row_day(row: dict[str, Any]) -> str | None:
 
 
 def _finalize_sales_summary_bucket(bucket: dict[str, Any]) -> dict[str, Any]:
+    orders = int(bucket["orders"])
+    sales_with_discount = float(bucket["salesWithDiscount"])
+    sales_without_discount = float(bucket["salesWithoutDiscount"])
     result = {
-        "orders": int(bucket["orders"]),
+        "orders": orders,
         "products": int(bucket["products"]),
-        "salesWithDiscount": _round_metric(float(bucket["salesWithDiscount"])),
-        "salesWithoutDiscount": _round_metric(float(bucket["salesWithoutDiscount"])),
-        "discount": _round_metric(
-            float(bucket["salesWithoutDiscount"]) - float(bucket["salesWithDiscount"])
-        ),
+        "salesWithDiscount": _round_metric(sales_with_discount),
+        "salesWithoutDiscount": _round_metric(sales_without_discount),
+        "discount": _round_metric(sales_without_discount - sales_with_discount),
+        "averageCheck": _round_metric(sales_with_discount / orders) if orders else 0,
     }
     if "unitId" in bucket:
         result["unitId"] = bucket["unitId"]
@@ -1318,6 +1407,71 @@ def _finalize_sales_summary_bucket(bucket: dict[str, Any]) -> dict[str, Any]:
     if "source" in bucket:
         result["source"] = bucket["source"]
     return result
+
+
+def _sales_summary_metrics(value: Any) -> dict[str, int | float]:
+    source = value if isinstance(value, dict) else {}
+    return {key: _round_metric(_as_float(source.get(key))) for key in SALES_SUMMARY_METRIC_KEYS}
+
+
+def _compare_sales_metrics(
+    current: dict[str, int | float],
+    baseline: dict[str, int | float],
+) -> dict[str, dict[str, int | float | None]]:
+    change: dict[str, int | float] = {}
+    change_percent: dict[str, int | float | None] = {}
+    for key in SALES_SUMMARY_METRIC_KEYS:
+        current_value = _as_float(current.get(key))
+        baseline_value = _as_float(baseline.get(key))
+        delta = current_value - baseline_value
+        change[key] = _round_metric(delta)
+        change_percent[key] = None if baseline_value == 0 else _round_metric(delta / baseline_value * 100)
+    return {"change": change, "changePercent": change_percent}
+
+
+def _compare_sales_units(
+    current_units: list[Any],
+    baseline_units: list[Any],
+) -> list[dict[str, Any]]:
+    current_by_unit = {
+        str(item["unitId"]): item
+        for item in current_units
+        if isinstance(item, dict) and item.get("unitId")
+    }
+    baseline_by_unit = {
+        str(item["unitId"]): item
+        for item in baseline_units
+        if isinstance(item, dict) and item.get("unitId")
+    }
+    unit_ids = set(current_by_unit) | set(baseline_by_unit)
+    result = []
+    for unit_id in sorted(unit_ids, key=lambda item: _comparison_unit_name(item, current_by_unit, baseline_by_unit)):
+        current = _sales_summary_metrics(current_by_unit.get(unit_id))
+        baseline = _sales_summary_metrics(baseline_by_unit.get(unit_id))
+        comparison = _compare_sales_metrics(current, baseline)
+        current_item = current_by_unit.get(unit_id) or {}
+        baseline_item = baseline_by_unit.get(unit_id) or {}
+        result.append(
+            {
+                "unitId": unit_id,
+                "unitName": current_item.get("unitName") or baseline_item.get("unitName"),
+                "current": current,
+                "baseline": baseline,
+                "change": comparison["change"],
+                "changePercent": comparison["changePercent"],
+            }
+        )
+    return result
+
+
+def _comparison_unit_name(
+    unit_id: str,
+    current_by_unit: dict[str, dict[str, Any]],
+    baseline_by_unit: dict[str, dict[str, Any]],
+) -> str:
+    current = current_by_unit.get(unit_id) or {}
+    baseline = baseline_by_unit.get(unit_id) or {}
+    return str(current.get("unitName") or baseline.get("unitName") or unit_id)
 
 
 def external_http_error_detail(exc: httpx.HTTPStatusError, tool_name: str) -> dict[str, Any]:

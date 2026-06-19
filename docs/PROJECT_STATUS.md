@@ -76,6 +76,7 @@ separate explicit enablement path.
 - `GET /dodo/staff/vacancies/count`
 - `GET /dodo/accounting/sales`
 - `GET /dodo/accounting/sales/summary`
+- `GET /dodo/accounting/sales/comparison`
 - `GET /dodo/accounting/writeoffs/products`
 - `GET /dodo/accounting/writeoffs/products/summary`
 - `GET /dodo/accounting/slices/writeoff-rate`
@@ -101,7 +102,14 @@ answers instead of huge raw Dodo rows.
   - For questions like "выручка по всем пиццериям за май 2026".
   - `salesWithDiscount` is computed from `products[].priceWithDiscount`.
   - `salesWithoutDiscount` is computed from `products[].price`.
+  - `averageCheck` is computed as `salesWithDiscount / orders`.
   - Supports daily SQLite cache modes: `auto`, `refresh`, and `bypass`.
+- Sales revenue comparison:
+  - `GET /dodo/accounting/sales/comparison`
+  - Compares current and baseline periods.
+  - Returns current, baseline, absolute change, percent change, and per-pizzeria
+    deltas.
+  - Uses the same read-only sales source and cache behavior as sales summary.
 
 ### Superset read-only capabilities
 
@@ -129,16 +137,18 @@ answers instead of huge raw Dodo rows.
 
 ### Tests
 
-- Local test suite after sales summary changes:
-  - `74 passed`
-- Server test suite after deployment:
-  - `69 passed`
+- Local test suite after sales comparison changes:
+  - `89 passed`
 
 ### Live checks
 
 - Public Cloudflare route for `GET /dodo/accounting/sales/summary` returns `200`.
+- Public Cloudflare route for `GET /dodo/accounting/sales/comparison` returns `200`.
+- Public OpenAPI schema includes `getDodoAccountingSalesComparison`.
 - Small live sales summary query through the public URL returned correct compact
   totals.
+- Small live sales comparison query for one pizzeria returned current, baseline,
+  absolute change, and percent change.
 - Dodo OAuth token on the server was refreshed and synced into Bridge `.env`.
 
 ### Example result

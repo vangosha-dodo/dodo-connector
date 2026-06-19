@@ -23,6 +23,7 @@ def test_dodo_functions_list(tmp_path) -> None:
     assert "accounting_sales" in names
     assert "accounting_inventory_stocks" in names
     assert "accounting_slice_writeoff_rate" in names
+    assert "accounting_sales_comparison" in names
     assert "accounting_stock_consumptions_by_period" in names
     assert "accounting_writeoffs_products_summary" in names
     assert "courier_orders" in names
@@ -164,6 +165,7 @@ def test_dodo_accounting_sales_summary_aggregates_by_unit(tmp_path, monkeypatch)
         "salesWithDiscount": 340,
         "salesWithoutDiscount": 390,
         "discount": 50,
+        "averageCheck": 113.33,
     }
     assert payload["units"] == [
         {
@@ -172,6 +174,7 @@ def test_dodo_accounting_sales_summary_aggregates_by_unit(tmp_path, monkeypatch)
             "salesWithDiscount": 160,
             "salesWithoutDiscount": 190,
             "discount": 30,
+            "averageCheck": 80,
             "unitId": "unit-1",
             "unitName": "Точка 1",
             "source": {"rowsKey": "sales", "pagesFetched": 2, "truncated": False, "nextSkip": None},
@@ -182,6 +185,7 @@ def test_dodo_accounting_sales_summary_aggregates_by_unit(tmp_path, monkeypatch)
             "salesWithDiscount": 180,
             "salesWithoutDiscount": 200,
             "discount": 20,
+            "averageCheck": 180,
             "unitId": "unit-2",
             "unitName": "Точка 2",
             "source": {"rowsKey": "sales", "pagesFetched": 1, "truncated": False, "nextSkip": None},
@@ -303,6 +307,115 @@ def test_dodo_accounting_sales_summary_caches_zero_sales_days(tmp_path, monkeypa
     assert payload["source"]["pagesFetched"] == 0
     assert payload["units"][0]["source"]["cache"] == "hit"
     assert calls == [("unit-1", 0)]
+
+
+def test_dodo_accounting_sales_comparison_compares_periods(tmp_path, monkeypatch) -> None:
+    sales_by_period_unit = {
+        ("2026-06-01", "unit-1"): [
+            {
+                "unitId": "unit-1",
+                "unitName": "Точка 1",
+                "products": [{"price": 150, "priceWithDiscount": 120}],
+            }
+        ],
+        ("2026-06-01", "unit-2"): [
+            {
+                "unitId": "unit-2",
+                "unitName": "Точка 2",
+                "products": [{"price": 220, "priceWithDiscount": 200}],
+            }
+        ],
+        ("2026-05-01", "unit-1"): [
+            {
+                "unitId": "unit-1",
+                "unitName": "Точка 1",
+                "products": [{"price": 110, "priceWithDiscount": 100}],
+            }
+        ],
+        ("2026-05-01", "unit-2"): [
+            {
+                "unitId": "unit-2",
+                "unitName": "Точка 2",
+                "products": [{"price": 260, "priceWithDiscount": 250}],
+            }
+        ],
+    }
+
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        if parameters["skip"] != 0:
+            return {"sales": []}
+        return {"sales": sales_by_period_unit.get((parameters["from"], parameters["units"]), [])}
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/sales/comparison",
+            params={
+                "units": "unit-1,unit-2",
+                "from": "2026-06-01",
+                "to": "2026-06-01",
+                "compareFrom": "2026-05-01",
+                "compareTo": "2026-05-01",
+                "take": "10",
+                "cacheMode": "bypass",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "accounting_sales_comparison"
+    assert payload["complete"] is True
+    assert payload["current"]["total"]["salesWithDiscount"] == 320
+    assert payload["current"]["total"]["averageCheck"] == 160
+    assert payload["baseline"]["total"]["salesWithDiscount"] == 350
+    assert payload["baseline"]["total"]["averageCheck"] == 175
+    assert payload["change"]["salesWithDiscount"] == -30
+    assert payload["changePercent"]["salesWithDiscount"] == -8.57
+    assert payload["change"]["averageCheck"] == -15
+    assert payload["units"][0]["unitId"] == "unit-1"
+    assert payload["units"][0]["change"]["salesWithDiscount"] == 20
+    assert payload["units"][0]["changePercent"]["salesWithDiscount"] == 20
+    assert payload["units"][1]["unitId"] == "unit-2"
+    assert payload["units"][1]["change"]["salesWithDiscount"] == -50
+    assert payload["units"][1]["changePercent"]["salesWithDiscount"] == -20
+
+
+def test_dodo_accounting_sales_comparison_dry_run_plans_two_periods(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/sales/comparison",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-01",
+                "compareFrom": "2026-05-01",
+                "compareTo": "2026-05-01",
+                "dry_run": "true",
+                "take": "100",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "accounting_sales_comparison"
+    assert payload["dry_run"] is True
+    assert payload["current"]["dry_run"] is True
+    assert payload["baseline"]["dry_run"] is True
+    assert "from=2026-06-01" in payload["current"]["requests_preview"][0]["request"]["url"]
+    assert "to=2026-06-02" in payload["current"]["requests_preview"][0]["request"]["url"]
+    assert "from=2026-05-01" in payload["baseline"]["requests_preview"][0]["request"]["url"]
+    assert "to=2026-05-02" in payload["baseline"]["requests_preview"][0]["request"]["url"]
 
 
 def test_dodo_accounting_writeoffs_products_dry_run_uses_exclusive_to_date(tmp_path) -> None:

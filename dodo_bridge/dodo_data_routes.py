@@ -267,6 +267,60 @@ async def accounting_sales_summary(
     return result
 
 
+@router.get("/accounting/sales/comparison")
+async def accounting_sales_comparison(
+    units: str = Query(..., description="Comma-separated Dodo unit ids."),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    compare_from_date: date = Query(..., alias="compareFrom"),
+    compare_to_date: date = Query(..., alias="compareTo"),
+    take: int | None = Query(default=None, ge=1),
+    max_pages_per_unit: int | None = Query(default=None, alias="maxPagesPerUnit", ge=1),
+    concurrency: int | None = Query(default=None, ge=1, le=8),
+    cache_mode: str = Query(
+        default="auto",
+        alias="cacheMode",
+        pattern="^(auto|refresh|bypass)$",
+        description="auto uses cached daily summaries and fills misses; refresh recalculates and stores; bypass ignores cache.",
+    ),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    current_params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
+    baseline_params = _period_params(
+        context.settings,
+        units,
+        compare_from_date,
+        compare_to_date,
+        exclusive_to=True,
+    )
+    result = await context.service.fetch_sales_comparison(
+        current_parameters=current_params,
+        baseline_parameters=baseline_params,
+        dry_run=dry_run,
+        take=take,
+        max_pages_per_unit=max_pages_per_unit,
+        concurrency=concurrency,
+        cache_mode=cache_mode,
+    )
+    _record_dodo_audit(
+        context,
+        function_name="accounting_sales_comparison",
+        parameters={
+            **current_params,
+            "compareFrom": compare_from_date.isoformat(),
+            "compareTo": compare_to_date.isoformat(),
+            "cacheMode": cache_mode,
+        },
+        dry_run=dry_run,
+        fields=None,
+        take=take,
+        max_pages=max_pages_per_unit,
+        result=result,
+    )
+    return result
+
+
 @router.get("/accounting/writeoffs/products")
 async def accounting_writeoffs_products(
     units: str = Query(..., description="Comma-separated Dodo unit ids."),
