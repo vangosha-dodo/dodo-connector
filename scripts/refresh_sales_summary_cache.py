@@ -17,6 +17,31 @@ from dodo_bridge.pizzerias import load_pizzerias
 MOSCOW_TZ = ZoneInfo("Europe/Moscow")
 
 
+def response_error_summary(response: requests.Response) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "status_code": response.status_code,
+        "url": response.url,
+    }
+    try:
+        payload = response.json()
+    except ValueError:
+        text = response.text.strip()
+        if text:
+            summary["body_preview"] = text[:1000]
+        return summary
+
+    if isinstance(payload, dict):
+        detail = payload.get("detail")
+        summary["body"] = payload
+        if isinstance(detail, dict):
+            summary["external_status"] = detail.get("external_status")
+            summary["external_code"] = detail.get("external_code")
+            summary["error"] = detail.get("error")
+    else:
+        summary["body"] = payload
+    return summary
+
+
 def resolve_period(
     *,
     preset: str,
@@ -84,7 +109,10 @@ def refresh_cache(
         },
         timeout=timeout,
     )
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        raise RuntimeError(json.dumps(response_error_summary(response), ensure_ascii=False)) from exc
     return response.json()
 
 

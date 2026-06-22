@@ -4,8 +4,9 @@ from datetime import date
 from types import SimpleNamespace
 
 import pytest
+import requests
 
-from scripts.refresh_sales_summary_cache import refresh_cache, resolve_period
+from scripts.refresh_sales_summary_cache import refresh_cache, resolve_period, response_error_summary
 
 
 def test_resolve_yesterday_period() -> None:
@@ -87,3 +88,28 @@ def test_refresh_cache_passes_cache_mode(monkeypatch) -> None:
     assert captured["params"]["from"] == "2026-06-01"
     assert captured["params"]["to"] == "2026-06-18"
     assert captured["timeout"] == 1200
+
+
+def test_response_error_summary_extracts_bridge_external_status() -> None:
+    response = requests.Response()
+    response.status_code = 502
+    response.url = "http://bridge.example/dodo/accounting/sales/summary"
+    response._content = (  # noqa: SLF001
+        b'{"detail":{"error":"external_http_error","tool_name":"dodo_accounting_sales","external_status":401}}'
+    )
+    response.headers["Content-Type"] = "application/json"
+
+    assert response_error_summary(response) == {
+        "status_code": 502,
+        "url": "http://bridge.example/dodo/accounting/sales/summary",
+        "body": {
+            "detail": {
+                "error": "external_http_error",
+                "tool_name": "dodo_accounting_sales",
+                "external_status": 401,
+            }
+        },
+        "external_status": 401,
+        "external_code": None,
+        "error": "external_http_error",
+    }

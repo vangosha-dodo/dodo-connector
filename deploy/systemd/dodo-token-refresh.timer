@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh Dodo Bridge API token before cache warmup
+
+[Timer]
+OnCalendar=*-*-* 00:20:00
+Persistent=true
+RandomizedDelaySec=2m
+
+[Install]
+WantedBy=timers.target

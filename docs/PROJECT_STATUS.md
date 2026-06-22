@@ -308,11 +308,21 @@ Implemented foundation:
   - `deploy/systemd/dodo-sales-cache-current-month.timer`
   - Uses `cacheMode=auto` so it backfills cache gaps without forcing a full
     recalculation when the daily cache is already warm.
+- Add Dodo API token refresh unit before cache warmup:
+  - `deploy/systemd/dodo-token-refresh.service`
+  - `deploy/systemd/dodo-token-refresh.timer`
+  - Refreshes `DODO_ACCESS_TOKEN` from the saved OpenClaw OAuth files and
+    restarts `dodo-bridge` before the cache jobs run.
+  - This fixes the failure mode where another token refresh updates `.env` but
+    the already-running Bridge process keeps using the old token.
 
 Verified cache coverage:
 
 - May 2026: fully cached for all 16 pizzerias.
-- June 1-18, 2026: fully cached for all 16 pizzerias.
+- June 1-21, 2026: fully cached for all 16 pizzerias after renewing the Dodo
+  API token and rerunning the current-month cache warmup.
+- Public check for June 1-21, 2026 with `cacheMode=auto` returned
+  `dailyRowsHit=336`, `dailyRowsMissed=0`, and `unitsFetchedLive=0`.
 
 Remaining work:
 

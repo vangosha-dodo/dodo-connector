@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh Dodo Bridge API token
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/dodo-chatgpt-bridge
+ExecStart=/home/ubuntu/dodo-chatgpt-bridge/.venv/bin/python scripts/refresh_dodo_token.py --auth-json /home/ubuntu/.openclaw/dodo/auth.json --token-json /home/ubuntu/.openclaw/dodo/token.json --env-file /home/ubuntu/dodo-chatgpt-bridge/.env --min-ttl-seconds 86400
+ExecStartPost=+/bin/systemctl restart dodo-bridge.service
