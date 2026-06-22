@@ -319,6 +319,21 @@ OPTIONAL_UNITS_PERIOD_PARAMETERS: list[dict[str, Any]] = (
     + PAGINATION_PARAMETERS
 )
 
+STOCK_CONSUMPTION_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
+    [COMPACT_UNITS_PARAMETER, *COMMON_PERIOD_PARAMETERS[1:3]]
+    + [
+        {
+            "name": "topLimit",
+            "in": "query",
+            "required": False,
+            "description": "Maximum rows to return in compact top lists.",
+            "schema": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
+        },
+        COMMON_PERIOD_PARAMETERS[4],
+    ]
+    + PAGINATION_PARAMETERS
+)
+
 WRITEOFF_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
     [COMPACT_UNITS_PARAMETER, *COMMON_PERIOD_PARAMETERS[1:3]]
     + [
@@ -859,6 +874,21 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "responses": data_response("Stock consumption rows."),
                 }
             },
+            "/dodo/accounting/stock-consumptions-by-period/summary": {
+                "get": {
+                    "operationId": "getDodoAccountingStockConsumptionSummary",
+                    "summary": "Get compact stock consumption summary",
+                    "description": (
+                        "Aggregate stock consumptions by pizzeria, item, measurement unit, "
+                        "and consumption type. Use for cost and usage analysis."
+                    ),
+                    "parameters": STOCK_CONSUMPTION_SUMMARY_PARAMETERS,
+                    "responses": successful_response(
+                        "Stock consumption cost summary.",
+                        "#/components/schemas/DodoStockConsumptionSummaryResponse",
+                    ),
+                }
+            },
             "/dodo/units/month-goals": {
                 "get": {
                     "operationId": "getDodoUnitMonthGoals",
@@ -908,6 +938,13 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "DodoInventoryStocksSummaryUnit": dodo_inventory_stocks_summary_unit_schema(),
                 "DodoInventoryStocksSummaryItem": dodo_inventory_stocks_summary_item_schema(),
                 "DodoInventoryStocksSummarySource": dodo_inventory_stocks_summary_source_schema(),
+                "DodoStockConsumptionSummaryResponse": dodo_stock_consumption_summary_response_schema(),
+                "DodoStockConsumptionSummaryTotal": dodo_stock_consumption_summary_total_schema(),
+                "DodoStockConsumptionSummaryBucket": dodo_stock_consumption_summary_bucket_schema(),
+                "DodoStockConsumptionSummaryUnit": dodo_stock_consumption_summary_unit_schema(),
+                "DodoStockConsumptionSummaryItem": dodo_stock_consumption_summary_item_schema(),
+                "DodoStockConsumptionSummaryUnitItem": dodo_stock_consumption_summary_unit_item_schema(),
+                "DodoStockConsumptionSummarySource": dodo_stock_consumption_summary_source_schema(),
                 "DodoSalesSummaryResponse": dodo_sales_summary_response_schema(),
                 "DodoSalesSummaryTotal": dodo_sales_summary_total_schema(),
                 "DodoSalesSummaryUnit": dodo_sales_summary_unit_schema(),
@@ -1424,6 +1461,124 @@ def dodo_inventory_stocks_summary_item_schema() -> dict[str, Any]:
 
 
 def dodo_inventory_stocks_summary_source_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "rows_key": {"type": "string"},
+            "row_count": {"type": "integer"},
+            "pages_fetched": {"type": "integer"},
+            "truncated": {"type": "boolean"},
+            "next_skip": {"type": ["integer", "null"]},
+        },
+        "additionalProperties": False,
+    }
+
+
+def dodo_stock_consumption_summary_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Compact read-only stock consumption cost summary.",
+        "properties": {
+            "function": {"type": "string"},
+            "tool_name": {"type": "string"},
+            "dry_run": {"type": "boolean"},
+            "request": {"$ref": "#/components/schemas/DodoRequest"},
+            "pagination": {"$ref": "#/components/schemas/DodoPagination"},
+            "topLimit": {"type": "integer"},
+            "source": {"$ref": "#/components/schemas/DodoStockConsumptionSummarySource"},
+            "total": {"$ref": "#/components/schemas/DodoStockConsumptionSummaryTotal"},
+            "units": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoStockConsumptionSummaryUnit"},
+            },
+            "byConsumptionType": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoStockConsumptionSummaryBucket"},
+            },
+            "byMeasurementUnit": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoStockConsumptionSummaryBucket"},
+            },
+            "topItems": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoStockConsumptionSummaryItem"},
+            },
+            "topUnitItems": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoStockConsumptionSummaryUnitItem"},
+            },
+            "response": {"type": "object", "additionalProperties": True},
+        },
+        "required": ["function", "tool_name"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_stock_consumption_summary_total_schema() -> dict[str, Any]:
+    schema = dodo_stock_consumption_summary_bucket_schema()
+    schema["properties"].update(
+        {
+            "rowCount": {"type": "integer"},
+            "skippedRows": {"type": "integer"},
+            "currencies": {"type": "array", "items": {"type": "string"}},
+            "unitCount": {"type": "integer"},
+            "stockItemCount": {"type": "integer"},
+            "consumptionTypeCount": {"type": "integer"},
+        }
+    )
+    return schema
+
+
+def dodo_stock_consumption_summary_bucket_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "consumptionType": {"type": "string"},
+            "measurementUnit": {"type": "string"},
+            "rows": {"type": "integer"},
+            "quantity": {"type": "number"},
+            "costWithVat": {"type": "number"},
+            "costWithoutVat": {"type": "number"},
+        },
+        "additionalProperties": False,
+    }
+
+
+def dodo_stock_consumption_summary_unit_schema() -> dict[str, Any]:
+    schema = dodo_stock_consumption_summary_bucket_schema()
+    schema["properties"].update(
+        {
+            "unitId": {"type": "string"},
+            "unitName": {"type": ["string", "null"]},
+        }
+    )
+    return schema
+
+
+def dodo_stock_consumption_summary_item_schema() -> dict[str, Any]:
+    schema = dodo_stock_consumption_summary_bucket_schema()
+    schema["properties"].update(
+        {
+            "stockItemName": {"type": "string"},
+            "measurementUnit": {"type": ["string", "null"]},
+            "unitCount": {"type": "integer"},
+        }
+    )
+    return schema
+
+
+def dodo_stock_consumption_summary_unit_item_schema() -> dict[str, Any]:
+    schema = dodo_stock_consumption_summary_item_schema()
+    schema["properties"].update(
+        {
+            "unitId": {"type": "string"},
+            "unitName": {"type": ["string", "null"]},
+        }
+    )
+    return schema
+
+
+def dodo_stock_consumption_summary_source_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {

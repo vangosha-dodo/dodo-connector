@@ -37,6 +37,7 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
         "/dodo/accounting/inventory-stocks",
         "/dodo/accounting/inventory-stocks/summary",
         "/dodo/accounting/stock-consumptions-by-period",
+        "/dodo/accounting/stock-consumptions-by-period/summary",
         "/dodo/units/month-goals",
     }
     for path, path_item in schema["paths"].items():
@@ -326,6 +327,17 @@ def test_chatgpt_openapi_includes_stock_consumptions_by_period() -> None:
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/DodoDataResponse"
     }
+
+
+def test_chatgpt_openapi_includes_stock_consumptions_summary() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    operation = schema["paths"]["/dodo/accounting/stock-consumptions-by-period/summary"]["get"]
+    assert operation["operationId"] == "getDodoAccountingStockConsumptionSummary"
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/DodoStockConsumptionSummaryResponse"
+    }
+    assert "DodoStockConsumptionSummaryUnitItem" in schema["components"]["schemas"]
 
 
 def test_chatgpt_openapi_includes_unit_month_goals() -> None:

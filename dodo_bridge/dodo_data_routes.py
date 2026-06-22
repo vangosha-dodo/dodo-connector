@@ -821,7 +821,7 @@ async def accounting_stock_consumptions_by_period(
     dry_run: bool = Query(default=False),
     context: RouteContext = Depends(),
 ) -> dict[str, Any]:
-    params = _period_params(context.settings, units, from_date, to_date)
+    params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
     return await _fetch(
         context,
         function_name="accounting_stock_consumptions_by_period",
@@ -831,6 +831,53 @@ async def accounting_stock_consumptions_by_period(
         take=take,
         max_pages=max_pages,
     )
+
+
+@router.get("/accounting/stock-consumptions-by-period/summary")
+async def accounting_stock_consumptions_by_period_summary(
+    units: str | None = Query(
+        default=None,
+        description="Optional comma-separated Dodo unit ids. Omit for all configured pizzerias.",
+    ),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    top_limit: int = Query(
+        default=10,
+        ge=1,
+        le=50,
+        alias="topLimit",
+        description="Maximum rows to return in compact top lists.",
+    ),
+    take: int | None = Query(default=None, ge=1),
+    max_pages: int | None = Query(default=None, ge=1),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _period_params(
+        context.settings,
+        _units_or_all_pizzerias(context.settings, units),
+        from_date,
+        to_date,
+        exclusive_to=True,
+    )
+    result = await context.service.fetch_stock_consumptions_summary(
+        parameters=params,
+        dry_run=dry_run,
+        top_limit=top_limit,
+        take=take,
+        max_pages=max_pages,
+    )
+    _record_dodo_audit(
+        context,
+        function_name="accounting_stock_consumptions_by_period_summary",
+        parameters={**params, "topLimit": top_limit},
+        dry_run=dry_run,
+        fields=None,
+        take=take,
+        max_pages=max_pages,
+        result=result,
+    )
+    return result
 
 
 @router.get("/units/month-goals")

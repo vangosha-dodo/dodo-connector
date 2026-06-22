@@ -89,6 +89,7 @@ separate explicit enablement path.
 - `GET /dodo/accounting/inventory-stocks`
 - `GET /dodo/accounting/inventory-stocks/summary`
 - `GET /dodo/accounting/stock-consumptions-by-period`
+- `GET /dodo/accounting/stock-consumptions-by-period/summary`
 - `GET /dodo/units/month-goals`
 - `GET /dodo/ratings/customer-experience`
 - `GET /dodo/ratings/customer-experience/summary`
@@ -177,6 +178,12 @@ is not allowed to read them.
   - Compactly returns total stock money, critical low-stock items, zero/negative
     balances, high-stock items, and top balance-in-money items.
   - `units` is optional; when omitted, Bridge uses all configured pizzerias.
+- Stock consumption summary:
+  - `GET /dodo/accounting/stock-consumptions-by-period/summary`
+  - Compactly returns total cost, pizzeria totals, consumption type totals,
+    measurement unit totals, top stock items, and top pizzeria-item pairs.
+  - User-facing `to` is inclusive; Bridge sends the Dodo API an exclusive
+    next-day `to` because the source rejects same-day ranges otherwise.
 
 ### Superset read-only capabilities
 

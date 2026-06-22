@@ -30,6 +30,7 @@ def test_dodo_functions_list(tmp_path) -> None:
     assert "accounting_sales_discounts_summary" in names
     assert "accounting_sales_comparison" in names
     assert "accounting_stock_consumptions_by_period" in names
+    assert "accounting_stock_consumptions_by_period_summary" in names
     assert "accounting_writeoffs_products_summary" in names
     assert "courier_orders" in names
     assert "orders_clients_statistics" in names
@@ -1715,6 +1716,8 @@ def test_dodo_accounting_stock_consumptions_by_period_dry_run(tmp_path) -> None:
     assert payload["function"] == "accounting_stock_consumptions_by_period"
     assert payload["dry_run"] is True
     assert "/accounting/stock-consumptions-by-period" in payload["request"]["url"]
+    assert "from=2026-06-01" in payload["request"]["url"]
+    assert "to=2026-06-03" in payload["request"]["url"]
     assert "take=1" in payload["request"]["url"]
 
 
@@ -1780,6 +1783,155 @@ def test_dodo_accounting_stock_consumptions_by_period_paginates_and_projects(tmp
         {"stockItemName": "Tomato", "quantity": 20, "costWithVat": 200},
         {"stockItemName": "Sauce", "quantity": 30, "costWithVat": 300},
     ]
+
+
+def test_dodo_accounting_stock_consumptions_summary_groups_costs(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        assert parameters["from"] == "2026-06-01"
+        assert parameters["to"] == "2026-06-03"
+        if parameters["skip"] == 0:
+            return {
+                "consumptions": [
+                    {
+                        "unitId": "u1",
+                        "unitName": "One",
+                        "consumptionType": "Sales",
+                        "stockItemId": "cheese",
+                        "stockItemName": "Cheese",
+                        "measurementUnit": "Kilogram",
+                        "quantity": 10,
+                        "costWithVat": 100,
+                        "costWithoutVat": 83,
+                        "currency": "RUB",
+                    },
+                    {
+                        "unitId": "u1",
+                        "unitName": "One",
+                        "consumptionType": "StaffMeal",
+                        "stockItemId": "cheese",
+                        "stockItemName": "Cheese",
+                        "measurementUnit": "Kilogram",
+                        "quantity": 2,
+                        "costWithVat": 20,
+                        "costWithoutVat": 17,
+                        "currency": "RUB",
+                    },
+                    {
+                        "unitId": "u2",
+                        "unitName": "Two",
+                        "consumptionType": "Sales",
+                        "stockItemId": "tomato",
+                        "stockItemName": "Tomato",
+                        "measurementUnit": "Kilogram",
+                        "quantity": 20,
+                        "costWithVat": 200,
+                        "costWithoutVat": 167,
+                        "currency": "RUB",
+                    },
+                ]
+            }
+        return {
+            "consumptions": [
+                {
+                    "unitId": "u2",
+                    "unitName": "Two",
+                    "consumptionType": "WriteOff",
+                    "stockItemId": "box",
+                    "stockItemName": "Box",
+                    "measurementUnit": "Quantity",
+                    "quantity": 30,
+                    "costWithVat": 300,
+                    "costWithoutVat": 250,
+                    "currency": "RUB",
+                },
+            ]
+        }
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/stock-consumptions-by-period/summary",
+            params={
+                "units": "u1,u2",
+                "from": "2026-06-01",
+                "to": "2026-06-02",
+                "topLimit": "2",
+                "take": "3",
+                "max_pages": "2",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "accounting_stock_consumptions_by_period_summary"
+    assert payload["source"] == {
+        "rows_key": "consumptions",
+        "row_count": 4,
+        "pages_fetched": 2,
+        "truncated": False,
+        "next_skip": None,
+    }
+    assert payload["total"] == {
+        "rows": 4,
+        "quantity": 62,
+        "costWithVat": 620,
+        "costWithoutVat": 517,
+        "rowCount": 4,
+        "skippedRows": 0,
+        "currencies": ["RUB"],
+        "unitCount": 2,
+        "stockItemCount": 3,
+        "consumptionTypeCount": 3,
+    }
+    assert payload["units"] == [
+        {"unitId": "u2", "unitName": "Two", "rows": 2, "quantity": 50, "costWithVat": 500, "costWithoutVat": 417},
+        {"unitId": "u1", "unitName": "One", "rows": 2, "quantity": 12, "costWithVat": 120, "costWithoutVat": 100},
+    ]
+    assert payload["byConsumptionType"] == [
+        {"consumptionType": "Sales", "rows": 2, "quantity": 30, "costWithVat": 300, "costWithoutVat": 250},
+        {"consumptionType": "WriteOff", "rows": 1, "quantity": 30, "costWithVat": 300, "costWithoutVat": 250},
+        {"consumptionType": "StaffMeal", "rows": 1, "quantity": 2, "costWithVat": 20, "costWithoutVat": 17},
+    ]
+    assert payload["byMeasurementUnit"] == [
+        {"measurementUnit": "Kilogram", "rows": 3, "quantity": 32, "costWithVat": 320, "costWithoutVat": 267},
+        {"measurementUnit": "Quantity", "rows": 1, "quantity": 30, "costWithVat": 300, "costWithoutVat": 250},
+    ]
+    assert payload["topItems"] == [
+        {
+            "stockItemName": "Box",
+            "measurementUnit": "Quantity",
+            "unitCount": 1,
+            "rows": 1,
+            "quantity": 30,
+            "costWithVat": 300,
+            "costWithoutVat": 250,
+        },
+        {
+            "stockItemName": "Tomato",
+            "measurementUnit": "Kilogram",
+            "unitCount": 1,
+            "rows": 1,
+            "quantity": 20,
+            "costWithVat": 200,
+            "costWithoutVat": 167,
+        },
+    ]
+    assert payload["topUnitItems"][0] == {
+        "unitId": "u2",
+        "unitName": "Two",
+        "stockItemName": "Box",
+        "measurementUnit": "Quantity",
+        "rows": 1,
+        "quantity": 30,
+        "costWithVat": 300,
+        "costWithoutVat": 250,
+    }
 
 
 def test_dodo_units_month_goals_dry_run(tmp_path) -> None:

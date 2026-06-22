@@ -405,6 +405,20 @@ Returns ingredient consumption rows such as `unitName`, `consumptionType`,
 `stockItemName`, `measurementUnit`, `quantity`, `costWithVat`,
 `costWithoutVat`, and `currency`.
 
+Compact summary for ChatGPT:
+
+```http
+GET /dodo/accounting/stock-consumptions-by-period/summary?from=2026-06-21&to=2026-06-21&topLimit=10
+```
+
+When `units` is omitted, Bridge summarizes the configured pizzeria catalog.
+The response includes total cost, pizzeria totals, consumption type totals,
+measurement unit totals, top stock items, and top pizzeria-item pairs.
+
+For this source, the public Bridge `to` date is inclusive, but Bridge sends
+Dodo IS the next day as an exclusive `to` value because the Dodo endpoint rejects
+same-day ranges.
+
 ### Unit Month Goals
 
 ```http

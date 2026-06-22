@@ -138,6 +138,12 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         description="Stock consumption rows by period.",
         row_keys=("consumptions", "stockConsumptions", "items"),
     ),
+    "accounting_stock_consumptions_by_period_summary": DodoDataFunction(
+        name="accounting_stock_consumptions_by_period_summary",
+        tool_name="dodo_accounting_stock_consumptions_by_period",
+        description="Compact stock consumption cost summary by unit and item.",
+        row_keys=("consumptions", "stockConsumptions", "items"),
+    ),
     "units_month_goals": DodoDataFunction(
         name="units_month_goals",
         tool_name="dodo_units_month_goals",
@@ -1208,6 +1214,68 @@ class DodoDataService:
             **summary,
         }
 
+    async def fetch_stock_consumptions_summary(
+        self,
+        *,
+        parameters: dict[str, Any],
+        dry_run: bool,
+        top_limit: int,
+        take: int | None,
+        max_pages: int | None,
+    ) -> dict[str, Any]:
+        function = FUNCTIONS["accounting_stock_consumptions_by_period_summary"]
+        tool = self._allowed_tool(function, parameters, dry_run)
+        take_value = self._bounded_take(take)
+        max_pages_value = self._bounded_max_pages(max_pages)
+        base_params = dict(parameters)
+        if function.paginated and "take" in tool.allowed_query_params:
+            base_params["take"] = take_value
+            base_params.setdefault("skip", 0)
+
+        if dry_run:
+            request = self.connector.build_request(tool, base_params)
+            return {
+                "function": function.name,
+                "tool_name": tool.name,
+                "dry_run": True,
+                "request": request,
+                "topLimit": top_limit,
+                "pagination": {
+                    "enabled": function.paginated,
+                    "take": take_value,
+                    "max_pages": max_pages_value,
+                },
+            }
+
+        rows_result = await self._fetch_rows_for_summary(
+            function_name=function.name,
+            parameters=parameters,
+            fields=None,
+            take=take,
+            max_pages=max_pages,
+        )
+        rows = rows_result.get("rows")
+        if rows is None:
+            return {
+                "function": function.name,
+                "tool_name": rows_result.get("tool_name", tool.name),
+                "source": _source_meta(rows_result),
+                "response": rows_result.get("response"),
+            }
+
+        summary = summarize_stock_consumption_rows(
+            rows,
+            top_limit=top_limit,
+            unit_names_by_id=_configured_unit_names_by_id(self.settings),
+        )
+        return {
+            "function": function.name,
+            "tool_name": rows_result.get("tool_name", tool.name),
+            "topLimit": top_limit,
+            "source": _source_meta(rows_result),
+            **summary,
+        }
+
     async def _fetch_rows_for_summary(
         self,
         *,
@@ -1610,6 +1678,10 @@ RATING_UNIT_NAME_KEYS = ("unitName", "name", "pizzeriaName")
 INVENTORY_STOCK_NAME_KEYS = ("name", "stockItemName", "productName", "ingredientName", "id")
 INVENTORY_UNIT_ID_KEYS = ("unitId", "unitUUId", "unitUuid", "unitUUID")
 INVENTORY_UNIT_NAME_KEYS = ("unitName", "pizzeriaName")
+STOCK_CONSUMPTION_ITEM_NAME_KEYS = ("stockItemName", "name", "productName", "ingredientName", "stockItemId")
+STOCK_CONSUMPTION_ITEM_ID_KEYS = ("stockItemId", "id")
+STOCK_CONSUMPTION_UNIT_ID_KEYS = ("unitId", "unitUUId", "unitUuid", "unitUUID")
+STOCK_CONSUMPTION_UNIT_NAME_KEYS = ("unitName", "pizzeriaName")
 
 
 def summarize_rating_rows(
@@ -1942,6 +2014,187 @@ def _optional_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def summarize_stock_consumption_rows(
+    rows: list[Any],
+    *,
+    top_limit: int,
+    unit_names_by_id: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    total = _empty_consumption_bucket()
+    units: dict[str, dict[str, Any]] = {}
+    item_totals: dict[tuple[str, str | None], dict[str, Any]] = {}
+    unit_item_totals: dict[tuple[str, str, str | None], dict[str, Any]] = {}
+    type_totals: dict[str, dict[str, Any]] = {}
+    measurement_totals: dict[str, dict[str, Any]] = {}
+    skipped_rows = 0
+    currencies: set[str] = set()
+
+    for row in rows:
+        if not isinstance(row, dict):
+            skipped_rows += 1
+            continue
+
+        item = _stock_consumption_item(row, unit_names_by_id=unit_names_by_id)
+        _add_consumption_item(total, item)
+        if item.get("currency"):
+            currencies.add(str(item["currency"]))
+
+        unit_key = item.get("unitId") or item.get("unitName") or "unknown"
+        unit = units.setdefault(
+            str(unit_key),
+            {
+                "unitId": str(unit_key),
+                "unitName": item.get("unitName"),
+                **_empty_consumption_bucket(),
+            },
+        )
+        if item.get("unitName") and not unit.get("unitName"):
+            unit["unitName"] = item["unitName"]
+        _add_consumption_item(unit, item)
+
+        type_key = str(item.get("consumptionType") or "Unknown")
+        type_bucket = type_totals.setdefault(type_key, {"consumptionType": type_key, **_empty_consumption_bucket()})
+        _add_consumption_item(type_bucket, item)
+
+        measurement_key = str(item.get("measurementUnit") or "Unknown")
+        measurement_bucket = measurement_totals.setdefault(
+            measurement_key,
+            {"measurementUnit": measurement_key, **_empty_consumption_bucket()},
+        )
+        _add_consumption_item(measurement_bucket, item)
+
+        item_key = (str(item.get("stockItemName") or item.get("stockItemId") or "Unknown"), item.get("measurementUnit"))
+        item_bucket = item_totals.setdefault(
+            item_key,
+            {
+                "stockItemName": item_key[0],
+                "measurementUnit": item.get("measurementUnit"),
+                "unitCount": 0,
+                "_unitIds": set(),
+                **_empty_consumption_bucket(),
+            },
+        )
+        _add_consumption_item(item_bucket, item)
+        if item.get("unitId") and item["unitId"] not in item_bucket["_unitIds"]:
+            item_bucket["_unitIds"].add(item["unitId"])
+            item_bucket["unitCount"] += 1
+
+        unit_item_key = (
+            str(unit_key),
+            str(item.get("stockItemName") or item.get("stockItemId") or "Unknown"),
+            item.get("measurementUnit"),
+        )
+        unit_item_bucket = unit_item_totals.setdefault(
+            unit_item_key,
+            {
+                "unitId": str(unit_key),
+                "unitName": item.get("unitName"),
+                "stockItemName": unit_item_key[1],
+                "measurementUnit": item.get("measurementUnit"),
+                **_empty_consumption_bucket(),
+            },
+        )
+        if item.get("unitName") and not unit_item_bucket.get("unitName"):
+            unit_item_bucket["unitName"] = item["unitName"]
+        _add_consumption_item(unit_item_bucket, item)
+
+    unit_rows = [_finalize_consumption_named_bucket(unit) for unit in units.values()]
+    unit_rows.sort(key=lambda item: (-float(item["costWithVat"]), item.get("unitName") or item["unitId"]))
+
+    type_rows = [_finalize_consumption_named_bucket(bucket) for bucket in type_totals.values()]
+    type_rows.sort(key=lambda item: (-float(item["costWithVat"]), item["consumptionType"]))
+
+    measurement_rows = [_finalize_consumption_named_bucket(bucket) for bucket in measurement_totals.values()]
+    measurement_rows.sort(key=lambda item: (-float(item["costWithVat"]), item["measurementUnit"]))
+
+    item_rows = [_finalize_consumption_named_bucket(_drop_private_sets(bucket)) for bucket in item_totals.values()]
+    item_rows.sort(key=lambda item: (-float(item["costWithVat"]), item["stockItemName"]))
+
+    unit_item_rows = [_finalize_consumption_named_bucket(bucket) for bucket in unit_item_totals.values()]
+    unit_item_rows.sort(
+        key=lambda item: (-float(item["costWithVat"]), item.get("unitName") or item["unitId"], item["stockItemName"])
+    )
+
+    return {
+        "total": {
+            **_finalize_consumption_bucket(total),
+            "rowCount": len(rows),
+            "skippedRows": skipped_rows,
+            "currencies": sorted(currencies),
+            "unitCount": len(units),
+            "stockItemCount": len(item_totals),
+            "consumptionTypeCount": len(type_totals),
+        },
+        "units": unit_rows,
+        "byConsumptionType": type_rows,
+        "byMeasurementUnit": measurement_rows,
+        "topItems": item_rows[:top_limit],
+        "topUnitItems": unit_item_rows[:top_limit],
+    }
+
+
+def _stock_consumption_item(
+    row: dict[str, Any],
+    *,
+    unit_names_by_id: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    unit_id = _first_non_empty(row, STOCK_CONSUMPTION_UNIT_ID_KEYS)
+    unit_name = _first_non_empty(row, STOCK_CONSUMPTION_UNIT_NAME_KEYS)
+    if unit_id and not unit_name and unit_names_by_id:
+        unit_name = unit_names_by_id.get(unit_id) or unit_names_by_id.get(unit_id.casefold())
+    return {
+        "unitId": unit_id,
+        "unitName": unit_name,
+        "consumptionType": str(row.get("consumptionType")) if row.get("consumptionType") not in (None, "") else None,
+        "stockItemId": _first_non_empty(row, STOCK_CONSUMPTION_ITEM_ID_KEYS),
+        "stockItemName": _first_non_empty(row, STOCK_CONSUMPTION_ITEM_NAME_KEYS),
+        "measurementUnit": str(row.get("measurementUnit")) if row.get("measurementUnit") not in (None, "") else None,
+        "quantity": _optional_float(row.get("quantity")),
+        "costWithVat": _optional_float(row.get("costWithVat")),
+        "costWithoutVat": _optional_float(row.get("costWithoutVat")),
+        "currency": str(row.get("currency")) if row.get("currency") not in (None, "") else None,
+    }
+
+
+def _empty_consumption_bucket() -> dict[str, Any]:
+    return {
+        "rows": 0,
+        "quantity": 0.0,
+        "costWithVat": 0.0,
+        "costWithoutVat": 0.0,
+    }
+
+
+def _add_consumption_item(bucket: dict[str, Any], item: dict[str, Any]) -> None:
+    bucket["rows"] += 1
+    bucket["quantity"] += float(item.get("quantity") or 0)
+    bucket["costWithVat"] += float(item.get("costWithVat") or 0)
+    bucket["costWithoutVat"] += float(item.get("costWithoutVat") or 0)
+
+
+def _finalize_consumption_bucket(bucket: dict[str, Any]) -> dict[str, int | float]:
+    return {
+        "rows": int(bucket["rows"]),
+        "quantity": _round_metric(float(bucket["quantity"])),
+        "costWithVat": _round_metric(float(bucket["costWithVat"])),
+        "costWithoutVat": _round_metric(float(bucket["costWithoutVat"])),
+    }
+
+
+def _finalize_consumption_named_bucket(bucket: dict[str, Any]) -> dict[str, Any]:
+    result = {
+        key: value
+        for key, value in bucket.items()
+        if key not in {"rows", "quantity", "costWithVat", "costWithoutVat"} and not key.startswith("_")
+    }
+    result.update(_finalize_consumption_bucket(bucket))
+    return result
+
+
+def _drop_private_sets(bucket: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in bucket.items() if not key.startswith("_")}
 
 
 def summarize_writeoff_product_rows(
