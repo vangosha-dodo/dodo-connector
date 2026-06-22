@@ -31,6 +31,7 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
         "/dodo/accounting/writeoffs/products",
         "/dodo/accounting/writeoffs/products/summary",
         "/dodo/accounting/slices/writeoff-rate",
+        "/dodo/accounting/slices/daily-dynamics",
         "/dodo/accounting/inventory-stocks",
         "/dodo/accounting/stock-consumptions-by-period",
         "/dodo/units/month-goals",
@@ -277,6 +278,22 @@ def test_chatgpt_openapi_includes_slice_writeoff_rate() -> None:
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/DodoSliceWriteoffRateResponse"
     }
+
+
+def test_chatgpt_openapi_includes_slice_daily_dynamics() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    operation = schema["paths"]["/dodo/accounting/slices/daily-dynamics"]["get"]
+    assert operation["operationId"] == "getDodoSliceDailyDynamics"
+    parameter_names = {item["name"] for item in operation["parameters"]}
+    assert {"units", "from", "to", "productNamePrefix", "includeProducts"} <= parameter_names
+    units_param = next(item for item in operation["parameters"] if item["name"] == "units")
+    assert units_param["required"] is True
+    assert "fields" not in parameter_names
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/DodoSliceDailyDynamicsResponse"
+    }
+    assert "DodoSliceDailyDynamicsDay" in schema["components"]["schemas"]
 
 
 def test_chatgpt_openapi_includes_stock_consumptions_by_period() -> None:

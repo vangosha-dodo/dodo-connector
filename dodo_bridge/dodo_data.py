@@ -114,6 +114,12 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         description="Slice write-off rate from product sales and write-offs.",
         row_keys=("writeOffs", "writeoffs", "products", "items"),
     ),
+    "accounting_slice_daily_dynamics": DodoDataFunction(
+        name="accounting_slice_daily_dynamics",
+        tool_name="dodo_accounting_writeoffs_products",
+        description="Daily slice sales and write-off dynamics from product sales and write-offs.",
+        row_keys=("writeOffs", "writeoffs", "products", "items"),
+    ),
     "accounting_inventory_stocks": DodoDataFunction(
         name="accounting_inventory_stocks",
         tool_name="dodo_accounting_inventory_stocks",
@@ -150,7 +156,10 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
 }
 
 WRITEOFF_PRODUCT_SUMMARY_FIELDS = [
+    "unitId",
     "unitName",
+    "writtenOffAtLocal",
+    "writtenOffAt",
     "productName",
     "quantity",
     "pricePerPiece",
@@ -923,6 +932,120 @@ class DodoDataService:
             **summary,
         }
 
+    async def fetch_slice_daily_dynamics(
+        self,
+        *,
+        sales_parameters: dict[str, Any],
+        writeoff_parameters: dict[str, Any],
+        dry_run: bool,
+        product_name_prefix: str,
+        include_products: bool,
+        take: int | None = None,
+        max_pages: int | None = None,
+    ) -> dict[str, Any]:
+        unit_ids = normalize_units(str(sales_parameters["units"])).split(",")
+        days = _sales_summary_days(sales_parameters)
+        if dry_run:
+            first_day = days[0] if days else str(sales_parameters.get("from"))
+            next_day = (date.fromisoformat(first_day) + timedelta(days=1)).isoformat()
+            first_sales_params = {**sales_parameters, "from": first_day, "to": next_day}
+            first_writeoff_params = {**writeoff_parameters, "from": first_day, "to": next_day}
+            writeoff_plan = await self.fetch(
+                function_name="accounting_writeoffs_products_summary",
+                parameters=first_writeoff_params,
+                dry_run=True,
+                fields=WRITEOFF_PRODUCT_SUMMARY_FIELDS,
+                take=take,
+                max_pages=max_pages,
+            )
+            sales_plan = await self.fetch(
+                function_name="accounting_sales",
+                parameters=first_sales_params,
+                dry_run=True,
+                fields=None,
+                take=take,
+                max_pages=max_pages,
+            )
+            return {
+                "function": "accounting_slice_daily_dynamics",
+                "tool_name": "dodo_accounting_writeoffs_products+dodo_accounting_sales",
+                "dry_run": True,
+                "request_count": len(unit_ids) * len(days) * 2,
+                "requests_preview": {
+                    "first_day": first_day,
+                    "writeoffs": writeoff_plan.get("request"),
+                    "sales": sales_plan.get("request"),
+                },
+                "filter": {
+                    "productNamePrefix": product_name_prefix,
+                    "includeProducts": include_products,
+                },
+                "formula": "laidOutQuantity = soldQuantity + writeoffQuantity; writeoffPercent = writeoffQuantity / laidOutQuantity * 100",
+            }
+
+        unit_names = self._unit_names_by_id()
+        state = _new_slice_daily_dynamics_state(unit_ids=unit_ids, unit_names=unit_names, days=days)
+        source = {
+            "writeoffs": _new_slice_dynamics_source(),
+            "sales": _new_slice_dynamics_source(),
+        }
+
+        for unit_id in unit_ids:
+            unit_name = unit_names.get(unit_id)
+            for day in days:
+                next_day = (date.fromisoformat(day) + timedelta(days=1)).isoformat()
+                daily_sales_params = {**sales_parameters, "units": unit_id, "from": day, "to": next_day}
+                daily_writeoff_params = {**writeoff_parameters, "units": unit_id, "from": day, "to": next_day}
+                writeoff_result = await self._fetch_rows_for_summary(
+                    function_name="accounting_writeoffs_products_summary",
+                    parameters=daily_writeoff_params,
+                    fields=WRITEOFF_PRODUCT_SUMMARY_FIELDS,
+                    take=take,
+                    max_pages=max_pages,
+                )
+                sales_result = await self._fetch_rows_for_summary(
+                    function_name="accounting_sales",
+                    parameters=daily_sales_params,
+                    fields=None,
+                    take=take,
+                    max_pages=max_pages,
+                )
+                writeoff_rows = writeoff_result.get("rows") if isinstance(writeoff_result.get("rows"), list) else []
+                sales_rows = sales_result.get("rows") if isinstance(sales_result.get("rows"), list) else []
+                _add_slice_dynamics_source(source["writeoffs"], writeoff_result, unit_id, unit_name, day)
+                _add_slice_dynamics_source(source["sales"], sales_result, unit_id, unit_name, day)
+                _add_slice_dynamics_writeoff_rows(
+                    state,
+                    writeoff_rows,
+                    unit_id=unit_id,
+                    unit_name=unit_name,
+                    fallback_day=day,
+                    product_name_prefix=product_name_prefix,
+                    include_products=include_products,
+                )
+                _add_slice_dynamics_sales_rows(
+                    state,
+                    sales_rows,
+                    unit_id=unit_id,
+                    unit_name=unit_name,
+                    fallback_day=day,
+                    product_name_prefix=product_name_prefix,
+                    include_products=include_products,
+                )
+
+        summary = _finalize_slice_daily_dynamics_state(state, include_products=include_products)
+        return {
+            "function": "accounting_slice_daily_dynamics",
+            "tool_name": "dodo_accounting_writeoffs_products+dodo_accounting_sales",
+            "filter": {
+                "productNamePrefix": product_name_prefix,
+                "includeProducts": include_products,
+            },
+            "formula": "laidOutQuantity = soldQuantity + writeoffQuantity; writeoffPercent = writeoffQuantity / laidOutQuantity * 100",
+            "source": source,
+            **summary,
+        }
+
     async def _fetch_rows_for_summary(
         self,
         *,
@@ -945,6 +1068,7 @@ class DodoDataService:
         rows_key: str | None = None
         pages_fetched = 0
         truncated = False
+        reached_end = False
         for page in range(max_pages_value):
             page_params = dict(base_params)
             page_params["skip"] = page * take_value
@@ -966,9 +1090,10 @@ class DodoDataService:
             pages_fetched += 1
             all_rows.extend(project_rows(rows, fields))
             if len(rows) < take_value:
+                reached_end = True
                 break
 
-        if pages_fetched >= max_pages_value:
+        if pages_fetched >= max_pages_value and not reached_end:
             truncated = True
 
         return {
@@ -1466,6 +1591,223 @@ def summarize_slice_writeoff_rate(
     }
 
 
+def _new_slice_daily_dynamics_state(
+    *,
+    unit_ids: list[str],
+    unit_names: dict[str, str],
+    days: list[str],
+) -> dict[str, Any]:
+    return {
+        "days": days,
+        "matchedWriteoffRows": 0,
+        "matchedSalesProducts": 0,
+        "total": _empty_slice_rate_bucket("total"),
+        "dayBuckets": {day: _empty_slice_rate_bucket("total") for day in days},
+        "units": {
+            unit_id: {
+                "unitId": unit_id,
+                "unitName": unit_names.get(unit_id),
+                "total": _empty_slice_rate_bucket(unit_names.get(unit_id) or unit_id),
+                "dayBuckets": {day: _empty_slice_rate_bucket(unit_names.get(unit_id) or unit_id) for day in days},
+            }
+            for unit_id in unit_ids
+        },
+    }
+
+
+def _add_slice_dynamics_writeoff_rows(
+    state: dict[str, Any],
+    rows: list[Any],
+    *,
+    unit_id: str,
+    unit_name: str | None,
+    fallback_day: str,
+    product_name_prefix: str,
+    include_products: bool,
+) -> None:
+    prefix = product_name_prefix.casefold()
+    unit = state["units"].setdefault(
+        unit_id,
+        {
+            "unitId": unit_id,
+            "unitName": unit_name,
+            "total": _empty_slice_rate_bucket(unit_name or unit_id),
+            "dayBuckets": {day: _empty_slice_rate_bucket(unit_name or unit_id) for day in state["days"]},
+        },
+    )
+    if unit_name and not unit.get("unitName"):
+        unit["unitName"] = unit_name
+        unit["total"]["unitName"] = unit_name
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        row_unit_name = str(row.get("unitName") or unit_name or "")
+        if row_unit_name and not unit.get("unitName"):
+            unit["unitName"] = row_unit_name
+            unit["total"]["unitName"] = row_unit_name
+            for bucket in unit["dayBuckets"].values():
+                bucket["unitName"] = row_unit_name
+        product_name = str(row.get("productName") or "")
+        if prefix and not product_name.casefold().startswith(prefix):
+            continue
+        day = _writeoff_row_day(row) or fallback_day
+        if day not in state["dayBuckets"]:
+            continue
+        state["matchedWriteoffRows"] += 1
+        quantity = _as_float(row.get("quantity"))
+        amount = quantity * _as_float(row.get("pricePerPiece"))
+        for bucket in (
+            state["total"],
+            state["dayBuckets"][day],
+            unit["total"],
+            unit["dayBuckets"][day],
+        ):
+            _add_slice_rate_values(bucket, "writeoff", quantity, amount, product_name, include_products)
+
+
+def _add_slice_dynamics_sales_rows(
+    state: dict[str, Any],
+    rows: list[Any],
+    *,
+    unit_id: str,
+    unit_name: str | None,
+    fallback_day: str,
+    product_name_prefix: str,
+    include_products: bool,
+) -> None:
+    prefix = product_name_prefix.casefold()
+    unit = state["units"].setdefault(
+        unit_id,
+        {
+            "unitId": unit_id,
+            "unitName": unit_name,
+            "total": _empty_slice_rate_bucket(unit_name or unit_id),
+            "dayBuckets": {day: _empty_slice_rate_bucket(unit_name or unit_id) for day in state["days"]},
+        },
+    )
+    if unit_name and not unit.get("unitName"):
+        unit["unitName"] = unit_name
+        unit["total"]["unitName"] = unit_name
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        row_unit_name = str(row.get("unitName") or unit_name or "")
+        if row_unit_name and not unit.get("unitName"):
+            unit["unitName"] = row_unit_name
+            unit["total"]["unitName"] = row_unit_name
+            for bucket in unit["dayBuckets"].values():
+                bucket["unitName"] = row_unit_name
+        day = _sales_row_day(row) or fallback_day
+        if day not in state["dayBuckets"]:
+            continue
+        order_has_slice = False
+        for product in row.get("products") or []:
+            if not isinstance(product, dict):
+                continue
+            product_name = str(
+                product.get("defaultProductName")
+                or product.get("productName")
+                or product.get("name")
+                or ""
+            )
+            if prefix and not product_name.casefold().startswith(prefix):
+                continue
+            state["matchedSalesProducts"] += 1
+            order_has_slice = True
+            quantity = _product_quantity(product)
+            amount = _product_amount(product, quantity)
+            for bucket in (
+                state["total"],
+                state["dayBuckets"][day],
+                unit["total"],
+                unit["dayBuckets"][day],
+            ):
+                _add_slice_rate_values(bucket, "sold", quantity, amount, product_name, include_products)
+        if order_has_slice:
+            for bucket in (
+                state["total"],
+                state["dayBuckets"][day],
+                unit["total"],
+                unit["dayBuckets"][day],
+            ):
+                bucket["salesRowsWithSlices"] += 1
+
+
+def _finalize_slice_daily_dynamics_state(
+    state: dict[str, Any],
+    *,
+    include_products: bool,
+) -> dict[str, Any]:
+    units = []
+    for unit in state["units"].values():
+        unit_name = unit.get("unitName") or unit["unitId"]
+        unit["total"]["unitName"] = unit_name
+        for bucket in unit["dayBuckets"].values():
+            bucket["unitName"] = unit_name
+        units.append(
+            {
+                "unitId": unit["unitId"],
+                "unitName": unit_name,
+                "total": _finalize_slice_rate_bucket(unit["total"], include_products, include_name=False),
+                "days": [
+                    {
+                        "day": day,
+                        **_finalize_slice_rate_bucket(
+                            unit["dayBuckets"][day],
+                            include_products,
+                            include_name=False,
+                        ),
+                    }
+                    for day in state["days"]
+                ],
+            }
+        )
+    units.sort(key=lambda item: item["unitName"])
+    return {
+        "matchedWriteoffRows": state["matchedWriteoffRows"],
+        "matchedSalesProducts": state["matchedSalesProducts"],
+        "total": _finalize_slice_rate_bucket(state["total"], include_products, include_name=False),
+        "days": [
+            {
+                "day": day,
+                **_finalize_slice_rate_bucket(state["dayBuckets"][day], include_products, include_name=False),
+            }
+            for day in state["days"]
+        ],
+        "units": units,
+    }
+
+
+def _new_slice_dynamics_source() -> dict[str, Any]:
+    return {
+        "row_count": 0,
+        "pages_fetched": 0,
+        "truncated": False,
+        "truncatedDays": [],
+    }
+
+
+def _add_slice_dynamics_source(
+    source: dict[str, Any],
+    result: dict[str, Any],
+    unit_id: str,
+    unit_name: str | None,
+    day: str,
+) -> None:
+    source["row_count"] += int(result.get("row_count") or 0)
+    source["pages_fetched"] += int(result.get("pages_fetched") or 0)
+    if result.get("truncated"):
+        source["truncated"] = True
+        source["truncatedDays"].append(
+            {
+                "unitId": unit_id,
+                "unitName": unit_name,
+                "day": day,
+                "nextSkip": result.get("next_skip"),
+            }
+        )
+
+
 def _empty_slice_rate_bucket(unit_name: str) -> dict[str, Any]:
     return {
         "unitName": unit_name,
@@ -1764,6 +2106,15 @@ def _add_sales_summary_bucket(total: dict[str, Any], bucket: dict[str, Any]) -> 
 
 def _sales_row_day(row: dict[str, Any]) -> str | None:
     value = str(row.get("soldAtLocal") or row.get("soldAt") or "")
+    return _date_prefix(value)
+
+
+def _writeoff_row_day(row: dict[str, Any]) -> str | None:
+    value = str(row.get("writtenOffAtLocal") or row.get("writtenOffAt") or "")
+    return _date_prefix(value)
+
+
+def _date_prefix(value: str) -> str | None:
     if len(value) < 10:
         return None
     day = value[:10]

@@ -47,6 +47,9 @@ Use this text in the Custom GPT `Instructions` field.
 - Списания товаров: `getDodoAccountingProductWriteoffSummary`.
   - Для "кусочки" используй `productNamePrefix=Кус`.
   - Для широких запросов используй summary, не сырой endpoint.
+- Динамика продаж и списаний кусочков по дням: `getDodoSliceDailyDynamics`.
+  - Сначала resolve пиццерию через `listDodoPizzerias`, затем передай `units=<unit_id>`.
+  - Используй для вопросов вроде "динамика продажи и списания кусочков по Чите-2 в июне".
 - Процент списаний кусочков от выложенного количества: `getDodoSliceWriteoffRate`.
 - Дисконт сотрудникам из Superset: `getEmployeeDiscount`.
 - Доля продаж через киоск из Superset: `getKioskSalesShare`, если вопрос именно про утвержденный Superset-рецепт; иначе предпочитай sales channels summary.
@@ -76,6 +79,7 @@ Use this text in the Custom GPT `Instructions` field.
 - "Покажи выручку по всем пиццериям за май 2026" -> `getDodoAccountingSalesSummary` с `from=2026-05-01`, `to=2026-05-31`, без `units`, `cacheMode=auto`.
 - "Где просели продажи в июне к маю?" -> `getDodoAccountingSalesComparison`.
 - "Списания кусочков за вчера по всем" -> `getDodoAccountingProductWriteoffSummary` с `productNamePrefix=Кус`.
+- "Покажи динамику продажи и списания кусочков по Чите-2 в июне" -> `listDodoPizzerias`, затем `getDodoSliceDailyDynamics`.
 - "Списания кусочков в процентах от выложенного" -> `getDodoSliceWriteoffRate`.
 - "Какой дисконт сотрудникам был в Тамбов-1 в июне 2026" -> `listDodoPizzerias`, затем `getEmployeeDiscount`.
 - "Доля киоска по пиццериям" -> `getDodoAccountingSalesChannelsSummary` или `getKioskSalesShare`, если нужен именно Superset-рецепт.

@@ -24,6 +24,7 @@ def test_dodo_functions_list(tmp_path) -> None:
     assert "accounting_sales" in names
     assert "accounting_inventory_stocks" in names
     assert "accounting_slice_writeoff_rate" in names
+    assert "accounting_slice_daily_dynamics" in names
     assert "accounting_sales_channels_summary" in names
     assert "accounting_sales_discounts_summary" in names
     assert "accounting_sales_comparison" in names
@@ -1196,6 +1197,145 @@ def test_dodo_accounting_slices_writeoff_rate_aggregates_sales_and_writeoffs(tmp
     assert "rows" not in payload
     assert payload["source"]["sales"]["row_count"] == 3
     assert payload["source"]["writeoffs"]["row_count"] == 4
+
+
+def test_dodo_accounting_slices_daily_dynamics_dry_run_plans_first_day(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/slices/daily-dynamics",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-16",
+                "to": "2026-06-17",
+                "dry_run": "true",
+                "take": "100",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "accounting_slice_daily_dynamics"
+    assert payload["dry_run"] is True
+    assert payload["request_count"] == 4
+    assert payload["requests_preview"]["first_day"] == "2026-06-16"
+    assert "/accounting/write-offs/products" in payload["requests_preview"]["writeoffs"]["url"]
+    assert "/accounting/sales" in payload["requests_preview"]["sales"]["url"]
+    assert "from=2026-06-16" in payload["requests_preview"]["sales"]["url"]
+    assert "to=2026-06-17" in payload["requests_preview"]["sales"]["url"]
+
+
+def test_dodo_accounting_slices_daily_dynamics_groups_by_day(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, dry_run
+        day = parameters["from"]
+        if tool.name == "dodo_accounting_writeoffs_products":
+            rows_by_day = {
+                "2026-06-16": [
+                    {
+                        "unitId": "unit-1",
+                        "unitName": "Чита-2",
+                        "writtenOffAtLocal": "2026-06-16T12:00:00",
+                        "productName": "Кус Пепперони 1 шт",
+                        "quantity": 2,
+                        "pricePerPiece": 100,
+                    },
+                    {
+                        "unitId": "unit-1",
+                        "unitName": "Чита-2",
+                        "writtenOffAtLocal": "2026-06-16T13:00:00",
+                        "productName": "Напиток",
+                        "quantity": 9,
+                        "pricePerPiece": 50,
+                    },
+                ],
+                "2026-06-17": [
+                    {
+                        "unitId": "unit-1",
+                        "unitName": "Чита-2",
+                        "writtenOffAtLocal": "2026-06-17T12:00:00",
+                        "productName": "Кус Ветчина и сыр 1 шт",
+                        "quantity": 1,
+                        "pricePerPiece": 90,
+                    },
+                ],
+            }
+            return {"writeOffs": rows_by_day.get(day, [])}
+        if tool.name == "dodo_accounting_sales":
+            rows_by_day = {
+                "2026-06-16": [
+                    {
+                        "unitId": "unit-1",
+                        "unitName": "Чита-2",
+                        "soldAtLocal": "2026-06-16T10:00:00",
+                        "products": [
+                            {"defaultProductName": "Кус Пепперони 1 шт", "quantity": 3, "priceWithDiscount": 100},
+                            {"defaultProductName": "Напиток", "priceWithDiscount": 70},
+                        ],
+                    },
+                    {
+                        "unitId": "unit-1",
+                        "unitName": "Чита-2",
+                        "soldAtLocal": "2026-06-16T11:00:00",
+                        "products": [
+                            {"defaultProductName": "Кус Ветчина и сыр 1 шт", "price": 90},
+                        ],
+                    },
+                ],
+                "2026-06-17": [
+                    {
+                        "unitId": "unit-1",
+                        "unitName": "Чита-2",
+                        "soldAtLocal": "2026-06-17T10:00:00",
+                        "products": [
+                            {"defaultProductName": "Кус Пепперони 1 шт", "quantity": 2, "priceWithDiscount": 100},
+                        ],
+                    },
+                ],
+            }
+            return {"sales": rows_by_day.get(day, [])}
+        raise AssertionError(tool.name)
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/slices/daily-dynamics",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-16",
+                "to": "2026-06-17",
+                "take": "100",
+                "max_pages": "1",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "accounting_slice_daily_dynamics"
+    assert payload["total"]["soldQuantity"] == 6
+    assert payload["total"]["writeoffQuantity"] == 3
+    assert payload["total"]["laidOutQuantity"] == 9
+    assert payload["total"]["writeoffPercent"] == 33.3
+    assert payload["days"][0]["day"] == "2026-06-16"
+    assert payload["days"][0]["soldQuantity"] == 4
+    assert payload["days"][0]["writeoffQuantity"] == 2
+    assert payload["days"][0]["writeoffPercent"] == 33.3
+    assert payload["days"][1]["day"] == "2026-06-17"
+    assert payload["days"][1]["soldQuantity"] == 2
+    assert payload["days"][1]["writeoffQuantity"] == 1
+    assert payload["units"][0]["unitName"] == "Чита-2"
+    assert payload["source"]["sales"]["row_count"] == 3
+    assert payload["source"]["writeoffs"]["row_count"] == 3
+    assert payload["source"]["sales"]["truncated"] is False
 
 
 def test_dodo_data_external_http_error_returns_controlled_response(tmp_path, monkeypatch) -> None:

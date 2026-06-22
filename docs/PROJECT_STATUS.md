@@ -85,6 +85,7 @@ separate explicit enablement path.
 - `GET /dodo/accounting/writeoffs/products`
 - `GET /dodo/accounting/writeoffs/products/summary`
 - `GET /dodo/accounting/slices/writeoff-rate`
+- `GET /dodo/accounting/slices/daily-dynamics`
 - `GET /dodo/accounting/inventory-stocks`
 - `GET /dodo/accounting/stock-consumptions-by-period`
 - `GET /dodo/units/month-goals`
@@ -155,6 +156,12 @@ is not allowed to read them.
   - `includeActions=true` returns top source Dodo actions with masked promocode
     metadata.
   - `units` is optional; when omitted, Bridge uses all configured pizzerias.
+- Slice daily dynamics:
+  - `GET /dodo/accounting/slices/daily-dynamics`
+  - Groups read-only Dodo accounting sales and product write-offs by day.
+  - Use for questions like "динамика продажи и списания кусочков по Чите-2 в
+    июне".
+  - Requires `units`; resolve pizzeria names through `GET /dodo/pizzerias`.
 
 ### Superset read-only capabilities
 
@@ -323,6 +330,8 @@ Verified cache coverage:
   API token and rerunning the current-month cache warmup.
 - Public check for June 1-21, 2026 with `cacheMode=auto` returned
   `dailyRowsHit=336`, `dailyRowsMissed=0`, and `unitsFetchedLive=0`.
+- Public check for `GET /dodo/accounting/slices/daily-dynamics` on
+  `Чита-2`, June 1-21, 2026 returned 21 daily rows with no truncation.
 
 Remaining work:
 

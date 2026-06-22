@@ -668,6 +668,60 @@ async def accounting_slices_writeoff_rate(
     return result
 
 
+@router.get("/accounting/slices/daily-dynamics")
+async def accounting_slices_daily_dynamics(
+    units: str = Query(
+        ...,
+        description="Comma-separated Dodo unit ids. Resolve names with /dodo/pizzerias first.",
+    ),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    product_name_prefix: str = Query(
+        default="Кус",
+        alias="productNamePrefix",
+        description="Only products whose name starts with this prefix are counted as slices.",
+    ),
+    include_products: bool = Query(
+        default=False,
+        alias="includeProducts",
+        description="When true, include per-product details inside each day.",
+    ),
+    take: int | None = Query(default=None, ge=1),
+    max_pages: int | None = Query(default=None, ge=1),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    resolved_units = normalize_units(units)
+    sales_params = _period_params(context.settings, resolved_units, from_date, to_date, exclusive_to=True)
+    writeoff_params = _period_params(context.settings, resolved_units, from_date, to_date, exclusive_to=True)
+    take_value = take or context.settings.dodo_data_max_take
+    max_pages_value = max_pages or context.settings.dodo_data_default_max_pages
+    result = await context.service.fetch_slice_daily_dynamics(
+        sales_parameters=sales_params,
+        writeoff_parameters=writeoff_params,
+        dry_run=dry_run,
+        product_name_prefix=product_name_prefix,
+        include_products=include_products,
+        take=take_value,
+        max_pages=max_pages_value,
+    )
+    _record_dodo_audit(
+        context,
+        function_name="accounting_slice_daily_dynamics",
+        parameters={
+            **sales_params,
+            "productNamePrefix": product_name_prefix,
+            "includeProducts": include_products,
+        },
+        dry_run=dry_run,
+        fields=None,
+        take=take_value,
+        max_pages=max_pages_value,
+        result=result,
+    )
+    return result
+
+
 @router.get("/accounting/inventory-stocks")
 async def accounting_inventory_stocks(
     units: str = Query(..., description="Comma-separated Dodo unit ids."),

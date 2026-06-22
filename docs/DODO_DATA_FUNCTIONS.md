@@ -336,6 +336,33 @@ Optional flag:
 
 - `includeProducts=true` - include per-product percentages inside each pizzeria.
 
+### Slice Daily Dynamics
+
+```http
+GET /dodo/accounting/slices/daily-dynamics?units=<unit-id>&from=2026-06-01&to=2026-06-30&productNamePrefix=Кус
+```
+
+Uses the same read-only Dodo IS product write-offs plus accounting sales, but
+groups the result by business day. Use this for questions like "динамика
+продажи и списания кусочков по Чите-2 в июне".
+
+The endpoint returns compact daily rows:
+
+- `soldQuantity`
+- `writeoffQuantity`
+- `laidOutQuantity`
+- `writeoffPercent`
+- `soldAmount`
+- `writeoffAmount`
+
+Pass `units=<unit-id>`; resolve human pizzeria names through
+`GET /dodo/pizzerias` first. This keeps broad month-long product-level requests
+small and avoids sending raw sales/write-off rows back to ChatGPT.
+
+Optional flag:
+
+- `includeProducts=true` - include per-product daily details.
+
 ### Inventory Stocks
 
 ```http

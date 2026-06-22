@@ -318,6 +318,28 @@ SLICE_WRITEOFF_RATE_PARAMETERS: list[dict[str, Any]] = (
     + PAGINATION_PARAMETERS
 )
 
+SLICE_DAILY_DYNAMICS_PARAMETERS: list[dict[str, Any]] = (
+    [COMMON_PERIOD_PARAMETERS[0], *COMMON_PERIOD_PARAMETERS[1:3]]
+    + [
+        {
+            "name": "productNamePrefix",
+            "in": "query",
+            "required": False,
+            "description": "Product name prefix to count as slices. Use Кус for pizza slices.",
+            "schema": {"type": "string", "default": "Кус"},
+        },
+        {
+            "name": "includeProducts",
+            "in": "query",
+            "required": False,
+            "description": "When true, include per-product daily details.",
+            "schema": {"type": "boolean", "default": False},
+        },
+        COMMON_PERIOD_PARAMETERS[4],
+    ]
+    + PAGINATION_PARAMETERS
+)
+
 
 def build_schema(server_url: str) -> dict[str, Any]:
     server_url = server_url.rstrip("/")
@@ -674,6 +696,21 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ),
                 }
             },
+            "/dodo/accounting/slices/daily-dynamics": {
+                "get": {
+                    "operationId": "getDodoSliceDailyDynamics",
+                    "summary": "Get daily slice sales and write-offs",
+                    "description": (
+                        "Return daily slice sold quantity, write-off quantity, laid-out quantity, "
+                        "and write-off percent for selected pizzerias."
+                    ),
+                    "parameters": SLICE_DAILY_DYNAMICS_PARAMETERS,
+                    "responses": successful_response(
+                        "Daily slice sales and write-off dynamics.",
+                        "#/components/schemas/DodoSliceDailyDynamicsResponse",
+                    ),
+                }
+            },
             "/dodo/accounting/inventory-stocks": {
                 "get": {
                     "operationId": "getDodoAccountingInventoryStocks",
@@ -765,6 +802,11 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "DodoSliceWriteoffRateTotal": dodo_slice_writeoff_rate_total_schema(),
                 "DodoSliceWriteoffRateUnit": dodo_slice_writeoff_rate_unit_schema(),
                 "DodoSliceWriteoffRateProduct": dodo_slice_writeoff_rate_product_schema(),
+                "DodoSliceDailyDynamicsResponse": dodo_slice_daily_dynamics_response_schema(),
+                "DodoSliceDailyDynamicsSource": dodo_slice_daily_dynamics_source_schema(),
+                "DodoSliceDailyDynamicsSourcePart": dodo_slice_daily_dynamics_source_part_schema(),
+                "DodoSliceDailyDynamicsUnit": dodo_slice_daily_dynamics_unit_schema(),
+                "DodoSliceDailyDynamicsDay": dodo_slice_daily_dynamics_day_schema(),
                 "DodoRequest": dodo_request_schema(),
                 "DodoPagination": dodo_pagination_schema(),
                 "DodoRow": dodo_row_schema(),
@@ -1680,7 +1722,7 @@ def dodo_slice_writeoff_rate_response_schema() -> dict[str, Any]:
             },
             "filter": {"$ref": "#/components/schemas/DodoWriteoffSummaryFilter"},
             "formula": {"type": "string"},
-            "source": {"$ref": "#/components/schemas/DodoSliceWriteoffRateSource"},
+            "source": {"$ref": "#/components/schemas/DodoSliceDailyDynamicsSource"},
             "matchedWriteoffRows": {"type": "integer"},
             "matchedSalesProducts": {"type": "integer"},
             "total": {"$ref": "#/components/schemas/DodoSliceWriteoffRateTotal"},
@@ -1759,6 +1801,106 @@ def dodo_slice_writeoff_rate_product_schema() -> dict[str, Any]:
     }
     schema["required"] = ["productName", *schema["required"]]
     return schema
+
+
+def dodo_slice_daily_dynamics_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Daily read-only slice sales and write-off dynamics.",
+        "properties": {
+            "function": {"type": "string"},
+            "tool_name": {"type": "string"},
+            "dry_run": {"type": "boolean"},
+            "request_count": {"type": "integer"},
+            "requests_preview": {"type": "object", "properties": {}, "additionalProperties": True},
+            "filter": {"$ref": "#/components/schemas/DodoWriteoffSummaryFilter"},
+            "formula": {"type": "string"},
+            "source": {"$ref": "#/components/schemas/DodoSliceWriteoffRateSource"},
+            "matchedWriteoffRows": {"type": "integer"},
+            "matchedSalesProducts": {"type": "integer"},
+            "total": {"$ref": "#/components/schemas/DodoSliceWriteoffRateTotal"},
+            "days": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoSliceDailyDynamicsDay"},
+            },
+            "units": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoSliceDailyDynamicsUnit"},
+            },
+        },
+        "required": ["function", "tool_name", "filter"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_slice_daily_dynamics_day_schema() -> dict[str, Any]:
+    schema = dodo_slice_writeoff_rate_total_schema()
+    schema["properties"] = {
+        "day": {"type": "string", "format": "date"},
+        **schema["properties"],
+        "products": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/DodoSliceWriteoffRateProduct"},
+        },
+    }
+    schema["required"] = ["day", *schema["required"]]
+    return schema
+
+
+def dodo_slice_daily_dynamics_source_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "writeoffs": {"$ref": "#/components/schemas/DodoSliceDailyDynamicsSourcePart"},
+            "sales": {"$ref": "#/components/schemas/DodoSliceDailyDynamicsSourcePart"},
+        },
+        "required": ["writeoffs", "sales"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_slice_daily_dynamics_source_part_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "row_count": {"type": "integer"},
+            "pages_fetched": {"type": "integer"},
+            "truncated": {"type": "boolean"},
+            "truncatedDays": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "unitId": {"type": "string"},
+                        "unitName": {"type": ["string", "null"]},
+                        "day": {"type": "string", "format": "date"},
+                        "nextSkip": {"type": ["integer", "null"]},
+                    },
+                    "required": ["unitId", "unitName", "day", "nextSkip"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["row_count", "pages_fetched", "truncated", "truncatedDays"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_slice_daily_dynamics_unit_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "unitId": {"type": "string"},
+            "unitName": {"type": "string"},
+            "total": {"$ref": "#/components/schemas/DodoSliceWriteoffRateTotal"},
+            "days": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoSliceDailyDynamicsDay"},
+            },
+        },
+        "required": ["unitId", "unitName", "total", "days"],
+        "additionalProperties": False,
+    }
 
 
 def employee_discount_request_schema() -> dict[str, Any]:
