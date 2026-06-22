@@ -65,6 +65,9 @@ Uses:
 GET /dodopizza/{country}/staff/shifts
 ```
 
+The public `to` date is inclusive; Bridge sends Dodo `clockInTo` as the next
+day so same-day reports such as `from=2026-06-21&to=2026-06-21` work normally.
+
 ### Staff Vacancy Counts
 
 ```http

@@ -141,10 +141,11 @@ async def staff_shifts(
     context: RouteContext = Depends(),
 ) -> dict[str, Any]:
     validate_period(from_date, to_date, context.settings)
+    api_to_date = to_date + timedelta(days=1)
     params = {
         "units": normalize_units(units),
         "clockInFrom": from_date.isoformat(),
-        "clockInTo": to_date.isoformat(),
+        "clockInTo": api_to_date.isoformat(),
         "staffTypeName": staff_type_name,
     }
     return await _fetch(

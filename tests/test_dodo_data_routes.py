@@ -99,6 +99,36 @@ def test_dodo_orders_clients_statistics_dry_run_uses_dodo_date_params(tmp_path) 
     assert "take=100" in payload["request"]["url"]
 
 
+def test_dodo_staff_shifts_dry_run_uses_exclusive_clock_in_to(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/staff/shifts",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-21",
+                "to": "2026-06-21",
+                "staffTypeName": "Courier",
+                "dry_run": "true",
+                "take": "10",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "staff_shifts"
+    assert payload["dry_run"] is True
+    assert "/staff/shifts" in payload["request"]["url"]
+    assert "clockInFrom=2026-06-21" in payload["request"]["url"]
+    assert "clockInTo=2026-06-22" in payload["request"]["url"]
+    assert "staffTypeName=Courier" in payload["request"]["url"]
+    assert "take=10" in payload["request"]["url"]
+
+
 def test_dodo_production_productivity_dry_run(tmp_path) -> None:
     settings = make_settings(tmp_path)
     app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
