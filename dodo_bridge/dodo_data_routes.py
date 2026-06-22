@@ -818,6 +818,62 @@ async def ratings_customer_experience(
     )
 
 
+@router.get("/ratings/customer-experience/summary")
+async def ratings_customer_experience_summary(
+    units: str | None = Query(
+        default=None,
+        description="Optional comma-separated Dodo unit ids. Omit with no countryCode for all configured pizzerias.",
+    ),
+    country_code: int | None = Query(
+        default=None,
+        alias="countryCode",
+        description="Optional Dodo country code. If set, summarize country-level ratings.",
+    ),
+    low_rate_threshold: float = Query(
+        default=80.0,
+        ge=0,
+        alias="lowRateThreshold",
+        description="Units with rating below this value are returned in belowThreshold.",
+    ),
+    top_limit: int = Query(
+        default=5,
+        ge=1,
+        le=50,
+        alias="topLimit",
+        description="How many best/worst units to return.",
+    ),
+    take: int | None = Query(default=None, ge=1),
+    max_pages: int | None = Query(default=None, ge=1),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _ratings_summary_params(context.settings, units=units, country_code=country_code)
+    result = await context.service.fetch_ratings_summary(
+        function_name="ratings_customer_experience_summary",
+        parameters=params,
+        dry_run=dry_run,
+        low_rate_threshold=low_rate_threshold,
+        top_limit=top_limit,
+        take=take,
+        max_pages=max_pages,
+    )
+    _record_dodo_audit(
+        context,
+        function_name="ratings_customer_experience_summary",
+        parameters={
+            **params,
+            "lowRateThreshold": low_rate_threshold,
+            "topLimit": top_limit,
+        },
+        dry_run=dry_run,
+        fields=None,
+        take=take,
+        max_pages=max_pages,
+        result=result,
+    )
+    return result
+
+
 @router.get("/ratings/standards")
 async def ratings_standards(
     units: str | None = Query(default=None, description="Comma-separated Dodo unit ids."),
@@ -842,6 +898,62 @@ async def ratings_standards(
         take=take,
         max_pages=max_pages,
     )
+
+
+@router.get("/ratings/standards/summary")
+async def ratings_standards_summary(
+    units: str | None = Query(
+        default=None,
+        description="Optional comma-separated Dodo unit ids. Omit with no countryCode for all configured pizzerias.",
+    ),
+    country_code: int | None = Query(
+        default=None,
+        alias="countryCode",
+        description="Optional Dodo country code. If set, summarize country-level ratings.",
+    ),
+    low_rate_threshold: float = Query(
+        default=80.0,
+        ge=0,
+        alias="lowRateThreshold",
+        description="Units with rating below this value are returned in belowThreshold.",
+    ),
+    top_limit: int = Query(
+        default=5,
+        ge=1,
+        le=50,
+        alias="topLimit",
+        description="How many best/worst units to return.",
+    ),
+    take: int | None = Query(default=None, ge=1),
+    max_pages: int | None = Query(default=None, ge=1),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _ratings_summary_params(context.settings, units=units, country_code=country_code)
+    result = await context.service.fetch_ratings_summary(
+        function_name="ratings_standards_summary",
+        parameters=params,
+        dry_run=dry_run,
+        low_rate_threshold=low_rate_threshold,
+        top_limit=top_limit,
+        take=take,
+        max_pages=max_pages,
+    )
+    _record_dodo_audit(
+        context,
+        function_name="ratings_standards_summary",
+        parameters={
+            **params,
+            "lowRateThreshold": low_rate_threshold,
+            "topLimit": top_limit,
+        },
+        dry_run=dry_run,
+        fields=None,
+        take=take,
+        max_pages=max_pages,
+        result=result,
+    )
+    return result
 
 
 def _period_params(
@@ -900,6 +1012,17 @@ def _ratings_params(*, units: str | None, country_code: int | None) -> dict[str,
     if not params:
         raise HTTPException(status_code=422, detail="Provide either 'units' or 'countryCode'")
     return params
+
+
+def _ratings_summary_params(
+    settings: Settings,
+    *,
+    units: str | None,
+    country_code: int | None,
+) -> dict[str, Any]:
+    if units or country_code is not None:
+        return _ratings_params(units=units, country_code=country_code)
+    return _ratings_params(units=_units_or_all_pizzerias(settings, units), country_code=None)
 
 
 def _optional_unit_country_params(*, units: str | None, country_code: int | None) -> dict[str, Any]:

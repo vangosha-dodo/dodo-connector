@@ -200,6 +200,58 @@ RATINGS_PARAMETERS: list[dict[str, Any]] = [
     },
 ]
 
+RATINGS_SUMMARY_PARAMETERS: list[dict[str, Any]] = [
+    {
+        "name": "units",
+        "in": "query",
+        "required": False,
+        "description": "Optional Dodo unit ids. Omit with no countryCode for all configured pizzerias.",
+        "schema": {"type": "string"},
+    },
+    {
+        "name": "countryCode",
+        "in": "query",
+        "required": False,
+        "description": "Optional Dodo country code for country-level ratings.",
+        "schema": {"type": "integer"},
+    },
+    {
+        "name": "lowRateThreshold",
+        "in": "query",
+        "required": False,
+        "description": "Return units below this rating in belowThreshold.",
+        "schema": {"type": "number", "default": 80},
+    },
+    {
+        "name": "topLimit",
+        "in": "query",
+        "required": False,
+        "description": "How many best and worst units to return.",
+        "schema": {"type": "integer", "minimum": 1, "maximum": 50, "default": 5},
+    },
+    {
+        "name": "dry_run",
+        "in": "query",
+        "required": False,
+        "description": "When true, return the planned Dodo API GET request without calling Dodo IS.",
+        "schema": {"type": "boolean", "default": False},
+    },
+    {
+        "name": "take",
+        "in": "query",
+        "required": False,
+        "description": "Optional page size for the ratings feed.",
+        "schema": {"type": "integer", "minimum": 1},
+    },
+    {
+        "name": "max_pages",
+        "in": "query",
+        "required": False,
+        "description": "Maximum number of pages to fetch from the ratings feed.",
+        "schema": {"type": "integer", "minimum": 1},
+    },
+]
+
 MONTH_GOALS_PARAMETERS: list[dict[str, Any]] = [
     {
         "name": "unit",
@@ -485,6 +537,21 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "responses": data_response("Customer experience rating rows."),
                 }
             },
+            "/dodo/ratings/customer-experience/summary": {
+                "get": {
+                    "operationId": "getDodoCustomerExperienceRatingsSummary",
+                    "summary": "Summarize customer experience ratings",
+                    "description": (
+                        "Return compact customer experience rating summary with average, "
+                        "best, worst, and below-threshold pizzerias."
+                    ),
+                    "parameters": RATINGS_SUMMARY_PARAMETERS,
+                    "responses": successful_response(
+                        "Customer experience rating summary.",
+                        "#/components/schemas/DodoRatingsSummaryResponse",
+                    ),
+                }
+            },
             "/dodo/ratings/standards": {
                 "get": {
                     "operationId": "getDodoStandardsRatings",
@@ -495,6 +562,21 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ),
                     "parameters": RATINGS_PARAMETERS,
                     "responses": data_response("Standards rating rows."),
+                }
+            },
+            "/dodo/ratings/standards/summary": {
+                "get": {
+                    "operationId": "getDodoStandardsRatingsSummary",
+                    "summary": "Summarize standards ratings",
+                    "description": (
+                        "Return compact standards rating summary with average, best, "
+                        "worst, and below-threshold pizzerias."
+                    ),
+                    "parameters": RATINGS_SUMMARY_PARAMETERS,
+                    "responses": successful_response(
+                        "Standards rating summary.",
+                        "#/components/schemas/DodoRatingsSummaryResponse",
+                    ),
                 }
             },
             "/dodo/delivery/courier-orders": {
@@ -773,6 +855,10 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "MissingCapabilityPeriod": missing_capability_period_schema(),
                 "MissingCapabilityResponse": missing_capability_response_schema(),
                 "DodoDataResponse": dodo_data_response_schema(),
+                "DodoRatingsSummaryResponse": dodo_ratings_summary_response_schema(),
+                "DodoRatingsSummaryTotal": dodo_ratings_summary_total_schema(),
+                "DodoRatingsSummaryUnit": dodo_ratings_summary_unit_schema(),
+                "DodoRatingsSummarySource": dodo_ratings_summary_source_schema(),
                 "DodoSalesSummaryResponse": dodo_sales_summary_response_schema(),
                 "DodoSalesSummaryTotal": dodo_sales_summary_total_schema(),
                 "DodoSalesSummaryUnit": dodo_sales_summary_unit_schema(),
@@ -1090,6 +1176,92 @@ def dodo_data_response_schema() -> dict[str, Any]:
             },
         },
         "required": ["function", "tool_name"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_ratings_summary_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Compact read-only rating summary by pizzeria.",
+        "properties": {
+            "function": {"type": "string"},
+            "tool_name": {"type": "string"},
+            "dry_run": {"type": "boolean"},
+            "request": {"$ref": "#/components/schemas/DodoRequest"},
+            "pagination": {"$ref": "#/components/schemas/DodoPagination"},
+            "meta": {
+                "type": "object",
+                "description": "Top-level rating period and publish metadata from Dodo IS.",
+                "properties": {},
+                "additionalProperties": True,
+            },
+            "threshold": {
+                "type": "object",
+                "properties": {"lowRate": {"type": "number"}},
+                "additionalProperties": False,
+            },
+            "topLimit": {"type": "integer"},
+            "source": {"$ref": "#/components/schemas/DodoRatingsSummarySource"},
+            "total": {"$ref": "#/components/schemas/DodoRatingsSummaryTotal"},
+            "lowestUnits": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoRatingsSummaryUnit"},
+            },
+            "highestUnits": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoRatingsSummaryUnit"},
+            },
+            "belowThreshold": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoRatingsSummaryUnit"},
+            },
+            "response": {"type": "object", "additionalProperties": True},
+        },
+        "required": ["function", "tool_name"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_ratings_summary_total_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "rowCount": {"type": "integer"},
+            "ratedUnits": {"type": "integer"},
+            "unscoredRows": {"type": "integer"},
+            "averageRate": {"type": ["number", "null"]},
+            "minRate": {"type": ["number", "null"]},
+            "maxRate": {"type": ["number", "null"]},
+            "belowThresholdUnits": {"type": "integer"},
+        },
+        "additionalProperties": False,
+    }
+
+
+def dodo_ratings_summary_unit_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "unitId": {"type": ["string", "null"]},
+            "unitName": {"type": ["string", "null"]},
+            "rate": {"type": "number"},
+            "rateField": {"type": ["string", "null"]},
+        },
+        "additionalProperties": False,
+    }
+
+
+def dodo_ratings_summary_source_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "rows_key": {"type": "string"},
+            "row_count": {"type": "integer"},
+            "pages_fetched": {"type": "integer"},
+            "truncated": {"type": "boolean"},
+            "next_skip": {"type": ["integer", "null"]},
+        },
         "additionalProperties": False,
     }
 

@@ -63,7 +63,10 @@ Use this text in the Custom GPT `Instructions` field.
 - Процент списаний кусочков от выложенного количества: `getDodoSliceWriteoffRate`.
 - Дисконт сотрудникам из Superset: `getEmployeeDiscount`.
 - Доля продаж через киоск из Superset: `getKioskSalesShare`, если вопрос именно про утвержденный Superset-рецепт; иначе предпочитай sales channels summary.
-- Рейтинги качества/стандартов: соответствующие read-only ratings endpoints.
+- Рейтинги качества/стандартов: для вопросов "где хуже/лучше", "какой рейтинг", "проблемные точки" используй compact summary endpoints:
+  - `getDodoCustomerExperienceRatingsSummary`;
+  - `getDodoStandardsRatingsSummary`.
+  - Сырые `getDodoCustomerExperienceRatings` и `getDodoStandardsRatings` используй только когда пользователь просит строки/детализацию.
 - Остатки, расход ингредиентов, вакансии, цели месяца: соответствующие read-only Dodo endpoints, если вопрос явно про эти показатели.
 - Новые клиенты/отток: `getDodoOrdersClientsStatistics`.
   - Если вернулся `status=blocked_by_scope`, объясни, что нужен Dodo scope `orders`.

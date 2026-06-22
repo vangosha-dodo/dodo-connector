@@ -146,10 +146,24 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         row_keys=("unitRates", "ratings", "items"),
         meta_keys=("periodFrom", "periodTo", "publishStatus", "publishedAt"),
     ),
+    "ratings_customer_experience_summary": DodoDataFunction(
+        name="ratings_customer_experience_summary",
+        tool_name="dodo_controlling_ratings_customer_experience",
+        description="Compact customer experience ratings summary by unit.",
+        row_keys=("unitRates", "ratings", "items"),
+        meta_keys=("periodFrom", "periodTo", "publishStatus", "publishedAt"),
+    ),
     "ratings_standards": DodoDataFunction(
         name="ratings_standards",
         tool_name="dodo_controlling_ratings_standards",
         description="Standards ratings by unit or country.",
+        row_keys=("unitRates", "ratings", "items"),
+        meta_keys=("periodFrom", "periodTo", "publishStatus", "publishedAt"),
+    ),
+    "ratings_standards_summary": DodoDataFunction(
+        name="ratings_standards_summary",
+        tool_name="dodo_controlling_ratings_standards",
+        description="Compact standards ratings summary by unit.",
         row_keys=("unitRates", "ratings", "items"),
         meta_keys=("periodFrom", "periodTo", "publishStatus", "publishedAt"),
     ),
@@ -1046,6 +1060,74 @@ class DodoDataService:
             **summary,
         }
 
+    async def fetch_ratings_summary(
+        self,
+        *,
+        function_name: str,
+        parameters: dict[str, Any],
+        dry_run: bool,
+        low_rate_threshold: float,
+        top_limit: int,
+        take: int | None,
+        max_pages: int | None,
+    ) -> dict[str, Any]:
+        function = FUNCTIONS[function_name]
+        tool = self._allowed_tool(function, parameters, dry_run)
+        take_value = self._bounded_take(take)
+        max_pages_value = self._bounded_max_pages(max_pages)
+        base_params = dict(parameters)
+        if function.paginated and "take" in tool.allowed_query_params:
+            base_params["take"] = take_value
+            base_params.setdefault("skip", 0)
+
+        if dry_run:
+            request = self.connector.build_request(tool, base_params)
+            return {
+                "function": function.name,
+                "tool_name": tool.name,
+                "dry_run": True,
+                "request": request,
+                "threshold": {"lowRate": low_rate_threshold},
+                "topLimit": top_limit,
+                "pagination": {
+                    "enabled": function.paginated,
+                    "take": take_value if function.paginated else None,
+                    "max_pages": max_pages_value if function.paginated else None,
+                },
+            }
+
+        rows_result = await self._fetch_rows_for_summary(
+            function_name=function_name,
+            parameters=parameters,
+            fields=None,
+            take=take,
+            max_pages=max_pages,
+        )
+        rows = rows_result.get("rows")
+        if rows is None:
+            return {
+                "function": function.name,
+                "tool_name": rows_result.get("tool_name", tool.name),
+                "meta": rows_result.get("meta"),
+                "source": _source_meta(rows_result),
+                "response": rows_result.get("response"),
+            }
+
+        summary = summarize_rating_rows(
+            rows,
+            low_rate_threshold=low_rate_threshold,
+            top_limit=top_limit,
+        )
+        return {
+            "function": function.name,
+            "tool_name": rows_result.get("tool_name", tool.name),
+            "meta": rows_result.get("meta"),
+            "threshold": {"lowRate": low_rate_threshold},
+            "topLimit": top_limit,
+            "source": _source_meta(rows_result),
+            **summary,
+        }
+
     async def _fetch_rows_for_summary(
         self,
         *,
@@ -1069,6 +1151,7 @@ class DodoDataService:
         pages_fetched = 0
         truncated = False
         reached_end = False
+        meta: dict[str, Any] = {}
         for page in range(max_pages_value):
             page_params = dict(base_params)
             page_params["skip"] = page * take_value
@@ -1079,6 +1162,7 @@ class DodoDataService:
                 return {
                     "function": function.name,
                     "tool_name": tool.name,
+                    "meta": extract_meta(payload, function.meta_keys) or None,
                     "row_count": None,
                     "rows_key": None,
                     "pages_fetched": pages_fetched,
@@ -1087,6 +1171,8 @@ class DodoDataService:
                 }
 
             rows_key = rows_key or current_key
+            if not meta:
+                meta = extract_meta(payload, function.meta_keys)
             pages_fetched += 1
             all_rows.extend(project_rows(rows, fields))
             if len(rows) < take_value:
@@ -1099,6 +1185,7 @@ class DodoDataService:
         return {
             "function": function.name,
             "tool_name": tool.name,
+            "meta": meta or None,
             "rows_key": rows_key,
             "row_count": len(all_rows),
             "pages_fetched": pages_fetched,
@@ -1421,6 +1508,106 @@ def project_rows(rows: list[Any], fields: list[str] | None) -> list[Any]:
             continue
         projected.append({field: row.get(field) for field in fields if field in row})
     return projected
+
+
+RATING_VALUE_KEYS = (
+    "rate",
+    "rating",
+    "score",
+    "value",
+    "rateValue",
+    "ratingValue",
+    "totalRate",
+    "overallRate",
+    "result",
+)
+RATING_UNIT_ID_KEYS = ("unitId", "unitUUId", "unitUuid", "unitUUID", "id")
+RATING_UNIT_NAME_KEYS = ("unitName", "name", "pizzeriaName")
+
+
+def summarize_rating_rows(
+    rows: list[Any],
+    *,
+    low_rate_threshold: float,
+    top_limit: int,
+) -> dict[str, Any]:
+    units: list[dict[str, Any]] = []
+    unscored_rows = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            unscored_rows += 1
+            continue
+        rate_key, rate = _extract_rating_value(row)
+        if rate is None:
+            unscored_rows += 1
+            continue
+        units.append(
+            {
+                "unitId": _first_non_empty(row, RATING_UNIT_ID_KEYS),
+                "unitName": _first_non_empty(row, RATING_UNIT_NAME_KEYS),
+                "rate": _round_metric(rate),
+                "rateField": rate_key,
+            }
+        )
+
+    units.sort(key=lambda item: (float(item["rate"]), str(item.get("unitName") or item.get("unitId") or "")))
+    lowest_units = units[:top_limit]
+    highest_units = sorted(
+        units,
+        key=lambda item: (-float(item["rate"]), str(item.get("unitName") or item.get("unitId") or "")),
+    )[:top_limit]
+    below_threshold = [unit for unit in units if float(unit["rate"]) < low_rate_threshold]
+    rate_values = [float(unit["rate"]) for unit in units]
+
+    return {
+        "total": {
+            "rowCount": len(rows),
+            "ratedUnits": len(units),
+            "unscoredRows": unscored_rows,
+            "averageRate": _round_metric(sum(rate_values) / len(rate_values)) if rate_values else None,
+            "minRate": _round_metric(min(rate_values)) if rate_values else None,
+            "maxRate": _round_metric(max(rate_values)) if rate_values else None,
+            "belowThresholdUnits": len(below_threshold),
+        },
+        "lowestUnits": lowest_units,
+        "highestUnits": highest_units,
+        "belowThreshold": below_threshold,
+    }
+
+
+def _extract_rating_value(row: dict[str, Any]) -> tuple[str | None, float | None]:
+    for key in RATING_VALUE_KEYS:
+        if key not in row:
+            continue
+        value = _parse_rating_value(row.get(key))
+        if value is not None:
+            return key, value
+    return None, None
+
+
+def _parse_rating_value(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().removesuffix("%").replace(",", ".")
+        if not normalized:
+            return None
+        try:
+            return float(normalized)
+        except ValueError:
+            return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_non_empty(row: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        value = row.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return None
 
 
 def summarize_writeoff_product_rows(

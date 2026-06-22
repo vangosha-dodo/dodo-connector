@@ -7,12 +7,14 @@ Reviewed on 2026-06-16 against the current Bridge code and live Dodo API access.
 1. `customer_experience_rating`
    - Source: `GET /controlling/ratings/customer-experience`
    - Why: direct weekly quality KPI for unit/country management.
-   - Status: implemented in Bridge.
+   - Status: implemented in Bridge; compact summary is exposed as
+     `GET /dodo/ratings/customer-experience/summary`.
 
 2. `standards_rating`
    - Source: `GET /controlling/ratings/standards`
    - Why: operational discipline and audit compliance KPI.
-   - Status: implemented in Bridge.
+   - Status: implemented in Bridge; compact summary is exposed as
+     `GET /dodo/ratings/standards/summary`.
 
 3. `inventory_stocks`
    - Source: `GET /dodopizza/{country}/accounting/inventory-stocks`

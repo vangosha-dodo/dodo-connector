@@ -1,6 +1,6 @@
 # Dodo ChatGPT Bridge - project status
 
-Updated: 2026-06-19
+Updated: 2026-06-22
 
 ## Goal
 
@@ -90,7 +90,9 @@ separate explicit enablement path.
 - `GET /dodo/accounting/stock-consumptions-by-period`
 - `GET /dodo/units/month-goals`
 - `GET /dodo/ratings/customer-experience`
+- `GET /dodo/ratings/customer-experience/summary`
 - `GET /dodo/ratings/standards`
+- `GET /dodo/ratings/standards/summary`
 
 ### Compact aggregations for ChatGPT
 
@@ -162,6 +164,13 @@ is not allowed to read them.
   - Use for questions like "динамика продажи и списания кусочков по Чите-2 в
     июне".
   - Requires `units`; resolve pizzeria names through `GET /dodo/pizzerias`.
+- Rating summaries:
+  - `GET /dodo/ratings/customer-experience/summary`
+  - `GET /dodo/ratings/standards/summary`
+  - Compactly returns average rating, best/worst pizzerias, and units below a
+    configurable threshold.
+  - When `units` and `countryCode` are omitted, Bridge summarizes the configured
+    pizzeria catalog instead of the full country.
 
 ### Superset read-only capabilities
 

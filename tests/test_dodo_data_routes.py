@@ -35,8 +35,10 @@ def test_dodo_functions_list(tmp_path) -> None:
     assert "production_orders_handover_time" in names
     assert "production_productivity" in names
     assert "ratings_customer_experience" in names
+    assert "ratings_customer_experience_summary" in names
     assert "staff_vacancies_count" in names
     assert "units_month_goals" in names
+    assert "ratings_standards_summary" in names
 
 
 def test_dodo_accounting_sales_dry_run(tmp_path) -> None:
@@ -1848,6 +1850,87 @@ def test_dodo_ratings_standards_paginates_and_keeps_meta(tmp_path, monkeypatch) 
         {"unitId": "u2", "rate": 80},
         {"unitId": "u3", "rate": 70},
     ]
+
+
+def test_dodo_ratings_standards_summary_aggregates_scores(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        base = {
+            "periodFrom": "2026-06-08",
+            "periodTo": "2026-06-14",
+            "publishStatus": "Published",
+            "publishedAt": "2026-06-15T16:19:01",
+        }
+        if parameters["skip"] == 0:
+            return {
+                **base,
+                "unitRates": [
+                    {"unitId": "u1", "unitName": "One", "rate": 90},
+                    {"unitId": "u2", "unitName": "Two", "score": "80%"},
+                    {"unitId": "u3", "unitName": "Three", "rate": 60},
+                ],
+            }
+        return {
+            **base,
+            "unitRates": [
+                {"unitId": "u4", "unitName": "Four", "rate": 70},
+                {"unitId": "u5", "unitName": "Five", "rate": None},
+            ],
+        }
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/ratings/standards/summary",
+            params={
+                "countryCode": "643",
+                "lowRateThreshold": "75",
+                "topLimit": "2",
+                "take": "3",
+                "max_pages": "2",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "ratings_standards_summary"
+    assert payload["meta"] == {
+        "periodFrom": "2026-06-08",
+        "periodTo": "2026-06-14",
+        "publishStatus": "Published",
+        "publishedAt": "2026-06-15T16:19:01",
+    }
+    assert payload["source"] == {
+        "rows_key": "unitRates",
+        "row_count": 5,
+        "pages_fetched": 2,
+        "truncated": False,
+        "next_skip": None,
+    }
+    assert payload["threshold"] == {"lowRate": 75}
+    assert payload["total"] == {
+        "rowCount": 5,
+        "ratedUnits": 4,
+        "unscoredRows": 1,
+        "averageRate": 75,
+        "minRate": 60,
+        "maxRate": 90,
+        "belowThresholdUnits": 2,
+    }
+    assert payload["lowestUnits"] == [
+        {"unitId": "u3", "unitName": "Three", "rate": 60, "rateField": "rate"},
+        {"unitId": "u4", "unitName": "Four", "rate": 70, "rateField": "rate"},
+    ]
+    assert payload["highestUnits"] == [
+        {"unitId": "u1", "unitName": "One", "rate": 90, "rateField": "rate"},
+        {"unitId": "u2", "unitName": "Two", "rate": 80, "rateField": "score"},
+    ]
+    assert [unit["unitName"] for unit in payload["belowThreshold"]] == ["Three", "Four"]
 
 
 def make_settings(

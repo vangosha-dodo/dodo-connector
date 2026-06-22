@@ -15,7 +15,9 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
         "/dodo/pizzerias",
         "/dodo/functions",
         "/dodo/ratings/customer-experience",
+        "/dodo/ratings/customer-experience/summary",
         "/dodo/ratings/standards",
+        "/dodo/ratings/standards/summary",
         "/dodo/delivery/courier-orders",
         "/dodo/staff/shifts",
         "/dodo/staff/vacancies/count",
@@ -132,12 +134,20 @@ def test_chatgpt_openapi_includes_ratings_routes() -> None:
     schema = build_schema("https://bridge.example.com")
 
     customer = schema["paths"]["/dodo/ratings/customer-experience"]["get"]
+    customer_summary = schema["paths"]["/dodo/ratings/customer-experience/summary"]["get"]
     standards = schema["paths"]["/dodo/ratings/standards"]["get"]
+    standards_summary = schema["paths"]["/dodo/ratings/standards/summary"]["get"]
     assert customer["operationId"] == "getDodoCustomerExperienceRatings"
+    assert customer_summary["operationId"] == "getDodoCustomerExperienceRatingsSummary"
     assert standards["operationId"] == "getDodoStandardsRatings"
+    assert standards_summary["operationId"] == "getDodoStandardsRatingsSummary"
     assert customer["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/DodoDataResponse"
     }
+    assert customer_summary["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/DodoRatingsSummaryResponse"
+    }
+    assert "DodoRatingsSummaryUnit" in schema["components"]["schemas"]
 
 
 def test_chatgpt_openapi_includes_inventory_stocks() -> None:

@@ -432,6 +432,16 @@ GET /controlling/ratings/customer-experience
 Returns `unitRates` plus top-level metadata such as `periodFrom`, `periodTo`,
 `publishStatus`, and `publishedAt`.
 
+Compact summary for ChatGPT:
+
+```http
+GET /dodo/ratings/customer-experience/summary?lowRateThreshold=80&topLimit=5
+```
+
+When `units` and `countryCode` are omitted, Bridge summarizes the configured
+pizzeria catalog. The response includes average rating, best/worst pizzerias,
+and units below the threshold.
+
 ### Standards Rating
 
 ```http
@@ -452,6 +462,16 @@ GET /controlling/ratings/standards
 
 Returns `unitRates` plus top-level metadata such as `periodFrom`, `periodTo`,
 `publishStatus`, and `publishedAt`.
+
+Compact summary for ChatGPT:
+
+```http
+GET /dodo/ratings/standards/summary?lowRateThreshold=80&topLimit=5
+```
+
+When `units` and `countryCode` are omitted, Bridge summarizes the configured
+pizzeria catalog. The response includes average rating, best/worst pizzerias,
+and units below the threshold.
 
 ## Example Dry Run
 
