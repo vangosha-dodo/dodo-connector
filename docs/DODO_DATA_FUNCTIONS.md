@@ -379,6 +379,16 @@ Returns stock balance rows such as `quantity`, `balanceInMoney`,
 `avgWeekdayExpense`, `avgWeekendExpense`, `daysUntilBalanceRunsOut`, and
 `calculatedAt`.
 
+Compact summary for ChatGPT:
+
+```http
+GET /dodo/accounting/inventory-stocks/summary?from=2026-06-21&to=2026-06-21&lowStockDaysThreshold=3&highStockDaysThreshold=21
+```
+
+When `units` is omitted, Bridge summarizes the configured pizzeria catalog.
+The response includes total stock money, critical low-stock items,
+zero/negative balances, high-stock items, and top balance-in-money items.
+
 ### Stock Consumptions By Period
 
 ```http

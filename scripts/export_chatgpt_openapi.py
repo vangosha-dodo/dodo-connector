@@ -348,6 +348,35 @@ WRITEOFF_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
     + PAGINATION_PARAMETERS
 )
 
+INVENTORY_SUMMARY_PARAMETERS: list[dict[str, Any]] = (
+    [COMPACT_UNITS_PARAMETER, *COMMON_PERIOD_PARAMETERS[1:3]]
+    + [
+        {
+            "name": "lowStockDaysThreshold",
+            "in": "query",
+            "required": False,
+            "description": "Items with daysUntilBalanceRunsOut at or below this value are critical.",
+            "schema": {"type": "number", "default": 3},
+        },
+        {
+            "name": "highStockDaysThreshold",
+            "in": "query",
+            "required": False,
+            "description": "Items with daysUntilBalanceRunsOut at or above this value are high-stock.",
+            "schema": {"type": "number", "default": 21},
+        },
+        {
+            "name": "topLimit",
+            "in": "query",
+            "required": False,
+            "description": "Maximum items to return in each compact list.",
+            "schema": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
+        },
+        COMMON_PERIOD_PARAMETERS[4],
+    ]
+    + PAGINATION_PARAMETERS
+)
+
 SLICE_WRITEOFF_RATE_PARAMETERS: list[dict[str, Any]] = (
     [COMPACT_UNITS_PARAMETER, *COMMON_PERIOD_PARAMETERS[1:3]]
     + [
@@ -804,6 +833,21 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "responses": data_response("Inventory stock rows."),
                 }
             },
+            "/dodo/accounting/inventory-stocks/summary": {
+                "get": {
+                    "operationId": "getDodoAccountingInventoryStockSummary",
+                    "summary": "Get compact inventory stock summary",
+                    "description": (
+                        "Aggregate inventory stocks into critical, high-stock, and top-money lists. "
+                        "Use for management questions about stock risk and frozen inventory money."
+                    ),
+                    "parameters": INVENTORY_SUMMARY_PARAMETERS,
+                    "responses": successful_response(
+                        "Inventory stock risk summary.",
+                        "#/components/schemas/DodoInventoryStocksSummaryResponse",
+                    ),
+                }
+            },
             "/dodo/accounting/stock-consumptions-by-period": {
                 "get": {
                     "operationId": "getDodoAccountingStockConsumptionsByPeriod",
@@ -859,6 +903,11 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "DodoRatingsSummaryTotal": dodo_ratings_summary_total_schema(),
                 "DodoRatingsSummaryUnit": dodo_ratings_summary_unit_schema(),
                 "DodoRatingsSummarySource": dodo_ratings_summary_source_schema(),
+                "DodoInventoryStocksSummaryResponse": dodo_inventory_stocks_summary_response_schema(),
+                "DodoInventoryStocksSummaryTotal": dodo_inventory_stocks_summary_total_schema(),
+                "DodoInventoryStocksSummaryUnit": dodo_inventory_stocks_summary_unit_schema(),
+                "DodoInventoryStocksSummaryItem": dodo_inventory_stocks_summary_item_schema(),
+                "DodoInventoryStocksSummarySource": dodo_inventory_stocks_summary_source_schema(),
                 "DodoSalesSummaryResponse": dodo_sales_summary_response_schema(),
                 "DodoSalesSummaryTotal": dodo_sales_summary_total_schema(),
                 "DodoSalesSummaryUnit": dodo_sales_summary_unit_schema(),
@@ -1253,6 +1302,128 @@ def dodo_ratings_summary_unit_schema() -> dict[str, Any]:
 
 
 def dodo_ratings_summary_source_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "rows_key": {"type": "string"},
+            "row_count": {"type": "integer"},
+            "pages_fetched": {"type": "integer"},
+            "truncated": {"type": "boolean"},
+            "next_skip": {"type": ["integer", "null"]},
+        },
+        "additionalProperties": False,
+    }
+
+
+def dodo_inventory_stocks_summary_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Compact read-only inventory stock risk summary by pizzeria.",
+        "properties": {
+            "function": {"type": "string"},
+            "tool_name": {"type": "string"},
+            "dry_run": {"type": "boolean"},
+            "request": {"$ref": "#/components/schemas/DodoRequest"},
+            "pagination": {"$ref": "#/components/schemas/DodoPagination"},
+            "thresholds": {
+                "type": "object",
+                "properties": {
+                    "lowStockDays": {"type": "number"},
+                    "highStockDays": {"type": "number"},
+                },
+                "additionalProperties": False,
+            },
+            "topLimit": {"type": "integer"},
+            "source": {"$ref": "#/components/schemas/DodoInventoryStocksSummarySource"},
+            "total": {"$ref": "#/components/schemas/DodoInventoryStocksSummaryTotal"},
+            "units": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoInventoryStocksSummaryUnit"},
+            },
+            "criticalItems": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoInventoryStocksSummaryItem"},
+            },
+            "zeroOrNegativeItems": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoInventoryStocksSummaryItem"},
+            },
+            "highStockItems": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoInventoryStocksSummaryItem"},
+            },
+            "topBalanceItems": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/DodoInventoryStocksSummaryItem"},
+            },
+            "response": {"type": "object", "additionalProperties": True},
+        },
+        "required": ["function", "tool_name"],
+        "additionalProperties": False,
+    }
+
+
+def dodo_inventory_stocks_summary_total_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "rowCount": {"type": "integer"},
+            "itemCount": {"type": "integer"},
+            "skippedRows": {"type": "integer"},
+            "totalBalanceInMoney": {"type": "number"},
+            "currencies": {"type": "array", "items": {"type": "string"}},
+            "lowStockItems": {"type": "integer"},
+            "zeroOrNegativeItems": {"type": "integer"},
+            "highStockItems": {"type": "integer"},
+            "unconfirmedItems": {"type": "integer"},
+            "latestCalculatedAt": {"type": ["string", "null"]},
+        },
+        "additionalProperties": False,
+    }
+
+
+def dodo_inventory_stocks_summary_unit_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "unitId": {"type": "string"},
+            "unitName": {"type": ["string", "null"]},
+            "itemCount": {"type": "integer"},
+            "totalBalanceInMoney": {"type": "number"},
+            "lowStockItems": {"type": "integer"},
+            "zeroOrNegativeItems": {"type": "integer"},
+            "highStockItems": {"type": "integer"},
+            "unconfirmedItems": {"type": "integer"},
+            "nearestRunOutDays": {"type": ["number", "null"]},
+        },
+        "additionalProperties": False,
+    }
+
+
+def dodo_inventory_stocks_summary_item_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "unitId": {"type": ["string", "null"]},
+            "unitName": {"type": ["string", "null"]},
+            "itemId": {"type": ["string", "null"]},
+            "name": {"type": ["string", "null"]},
+            "categoryName": {"type": ["string", "null"]},
+            "quantity": {"type": ["number", "null"]},
+            "measurementUnit": {"type": ["string", "null"]},
+            "balanceInMoney": {"type": ["number", "null"]},
+            "currency": {"type": ["string", "null"]},
+            "avgWeekdayExpense": {"type": ["number", "null"]},
+            "avgWeekendExpense": {"type": ["number", "null"]},
+            "daysUntilBalanceRunsOut": {"type": ["number", "null"]},
+            "calculatedAt": {"type": ["string", "null"]},
+            "isConfirmed": {"type": ["boolean", "null"]},
+        },
+        "additionalProperties": False,
+    }
+
+
+def dodo_inventory_stocks_summary_source_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {

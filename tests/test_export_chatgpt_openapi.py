@@ -35,6 +35,7 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
         "/dodo/accounting/slices/writeoff-rate",
         "/dodo/accounting/slices/daily-dynamics",
         "/dodo/accounting/inventory-stocks",
+        "/dodo/accounting/inventory-stocks/summary",
         "/dodo/accounting/stock-consumptions-by-period",
         "/dodo/units/month-goals",
     }
@@ -175,8 +176,19 @@ def test_chatgpt_openapi_includes_clients_and_production_routes() -> None:
         units_param = next(item for item in operation["parameters"] if item["name"] == "units")
         assert units_param["required"] is False
         assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
-            "$ref": "#/components/schemas/DodoDataResponse"
-        }
+        "$ref": "#/components/schemas/DodoDataResponse"
+    }
+
+
+def test_chatgpt_openapi_includes_inventory_stocks_summary() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    operation = schema["paths"]["/dodo/accounting/inventory-stocks/summary"]["get"]
+    assert operation["operationId"] == "getDodoAccountingInventoryStockSummary"
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/DodoInventoryStocksSummaryResponse"
+    }
+    assert "DodoInventoryStocksSummaryItem" in schema["components"]["schemas"]
 
 
 def test_chatgpt_openapi_includes_sales_summary() -> None:

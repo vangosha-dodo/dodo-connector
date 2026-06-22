@@ -126,6 +126,12 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         description="Inventory stock balance rows.",
         row_keys=("stocks", "inventoryStocks", "items"),
     ),
+    "accounting_inventory_stocks_summary": DodoDataFunction(
+        name="accounting_inventory_stocks_summary",
+        tool_name="dodo_accounting_inventory_stocks",
+        description="Compact inventory stock balance summary by unit.",
+        row_keys=("stocks", "inventoryStocks", "items"),
+    ),
     "accounting_stock_consumptions_by_period": DodoDataFunction(
         name="accounting_stock_consumptions_by_period",
         tool_name="dodo_accounting_stock_consumptions_by_period",
@@ -1128,6 +1134,79 @@ class DodoDataService:
             **summary,
         }
 
+    async def fetch_inventory_stocks_summary(
+        self,
+        *,
+        parameters: dict[str, Any],
+        dry_run: bool,
+        low_stock_days_threshold: float,
+        high_stock_days_threshold: float,
+        top_limit: int,
+        take: int | None,
+        max_pages: int | None,
+    ) -> dict[str, Any]:
+        function = FUNCTIONS["accounting_inventory_stocks_summary"]
+        tool = self._allowed_tool(function, parameters, dry_run)
+        take_value = self._bounded_take(take)
+        max_pages_value = self._bounded_max_pages(max_pages)
+        base_params = dict(parameters)
+        if function.paginated and "take" in tool.allowed_query_params:
+            base_params["take"] = take_value
+            base_params.setdefault("skip", 0)
+
+        if dry_run:
+            request = self.connector.build_request(tool, base_params)
+            return {
+                "function": function.name,
+                "tool_name": tool.name,
+                "dry_run": True,
+                "request": request,
+                "thresholds": {
+                    "lowStockDays": low_stock_days_threshold,
+                    "highStockDays": high_stock_days_threshold,
+                },
+                "topLimit": top_limit,
+                "pagination": {
+                    "enabled": function.paginated,
+                    "take": take_value,
+                    "max_pages": max_pages_value,
+                },
+            }
+
+        rows_result = await self._fetch_rows_for_summary(
+            function_name=function.name,
+            parameters=parameters,
+            fields=None,
+            take=take,
+            max_pages=max_pages,
+        )
+        rows = rows_result.get("rows")
+        if rows is None:
+            return {
+                "function": function.name,
+                "tool_name": rows_result.get("tool_name", tool.name),
+                "source": _source_meta(rows_result),
+                "response": rows_result.get("response"),
+            }
+
+        summary = summarize_inventory_stock_rows(
+            rows,
+            low_stock_days_threshold=low_stock_days_threshold,
+            high_stock_days_threshold=high_stock_days_threshold,
+            top_limit=top_limit,
+        )
+        return {
+            "function": function.name,
+            "tool_name": rows_result.get("tool_name", tool.name),
+            "thresholds": {
+                "lowStockDays": low_stock_days_threshold,
+                "highStockDays": high_stock_days_threshold,
+            },
+            "topLimit": top_limit,
+            "source": _source_meta(rows_result),
+            **summary,
+        }
+
     async def _fetch_rows_for_summary(
         self,
         *,
@@ -1527,6 +1606,11 @@ RATING_UNIT_ID_KEYS = ("unitId", "unitUUId", "unitUuid", "unitUUID", "id")
 RATING_UNIT_NAME_KEYS = ("unitName", "name", "pizzeriaName")
 
 
+INVENTORY_STOCK_NAME_KEYS = ("name", "stockItemName", "productName", "ingredientName", "id")
+INVENTORY_UNIT_ID_KEYS = ("unitId", "unitUUId", "unitUuid", "unitUUID")
+INVENTORY_UNIT_NAME_KEYS = ("unitName", "pizzeriaName")
+
+
 def summarize_rating_rows(
     rows: list[Any],
     *,
@@ -1610,6 +1694,231 @@ def _first_non_empty(row: dict[str, Any], keys: tuple[str, ...]) -> str | None:
         if value not in (None, ""):
             return str(value)
     return None
+
+
+def summarize_inventory_stock_rows(
+    rows: list[Any],
+    *,
+    low_stock_days_threshold: float,
+    high_stock_days_threshold: float,
+    top_limit: int,
+) -> dict[str, Any]:
+    units: dict[str, dict[str, Any]] = {}
+    items: list[dict[str, Any]] = []
+    skipped_rows = 0
+    currencies: set[str] = set()
+    latest_calculated_at: str | None = None
+
+    for row in rows:
+        if not isinstance(row, dict):
+            skipped_rows += 1
+            continue
+
+        item = _inventory_stock_item(row)
+        items.append(item)
+        if item.get("currency"):
+            currencies.add(str(item["currency"]))
+        calculated_at = item.get("calculatedAt")
+        if calculated_at and (latest_calculated_at is None or str(calculated_at) > latest_calculated_at):
+            latest_calculated_at = str(calculated_at)
+
+        unit_key = item.get("unitId") or item.get("unitName") or "unknown"
+        unit = units.setdefault(
+            str(unit_key),
+            _empty_inventory_unit(str(unit_key), item.get("unitName")),
+        )
+        _add_inventory_item_to_unit(
+            unit,
+            item,
+            low_stock_days_threshold=low_stock_days_threshold,
+            high_stock_days_threshold=high_stock_days_threshold,
+        )
+
+    low_stock_items = [
+        item
+        for item in items
+        if _is_low_stock_item(item, low_stock_days_threshold)
+    ]
+    zero_or_negative_items = [
+        item
+        for item in items
+        if item.get("quantity") is not None and float(item["quantity"]) <= 0
+    ]
+    high_stock_items = [
+        item
+        for item in items
+        if _is_high_stock_item(item, high_stock_days_threshold)
+    ]
+    top_balance_items = [
+        item
+        for item in items
+        if item.get("balanceInMoney") is not None and float(item["balanceInMoney"]) > 0
+    ]
+
+    unit_rows = [_finalize_inventory_unit(unit) for unit in units.values()]
+    unit_rows.sort(key=lambda item: (-float(item["totalBalanceInMoney"]), item.get("unitName") or item["unitId"]))
+
+    total_balance = sum(float(item.get("balanceInMoney") or 0) for item in items)
+    return {
+        "total": {
+            "rowCount": len(rows),
+            "itemCount": len(items),
+            "skippedRows": skipped_rows,
+            "totalBalanceInMoney": _round_metric(total_balance),
+            "currencies": sorted(currencies),
+            "lowStockItems": len(low_stock_items),
+            "zeroOrNegativeItems": len(zero_or_negative_items),
+            "highStockItems": len(high_stock_items),
+            "unconfirmedItems": sum(1 for item in items if item.get("isConfirmed") is False),
+            "latestCalculatedAt": latest_calculated_at,
+        },
+        "units": unit_rows,
+        "criticalItems": _sort_inventory_low_stock(low_stock_items)[:top_limit],
+        "zeroOrNegativeItems": _sort_inventory_low_stock(zero_or_negative_items)[:top_limit],
+        "highStockItems": _sort_inventory_high_stock(high_stock_items)[:top_limit],
+        "topBalanceItems": _sort_inventory_balance(top_balance_items)[:top_limit],
+    }
+
+
+def _inventory_stock_item(row: dict[str, Any]) -> dict[str, Any]:
+    quantity = _optional_float(row.get("quantity"))
+    balance = _optional_float(row.get("balanceInMoney"))
+    avg_weekday = _optional_float(row.get("avgWeekdayExpense"))
+    avg_weekend = _optional_float(row.get("avgWeekendExpense"))
+    days_until_runout = _optional_float(row.get("daysUntilBalanceRunsOut"))
+    return {
+        "unitId": _first_non_empty(row, INVENTORY_UNIT_ID_KEYS),
+        "unitName": _first_non_empty(row, INVENTORY_UNIT_NAME_KEYS),
+        "itemId": str(row.get("id")) if row.get("id") not in (None, "") else None,
+        "name": _first_non_empty(row, INVENTORY_STOCK_NAME_KEYS),
+        "categoryName": str(row.get("categoryName")) if row.get("categoryName") not in (None, "") else None,
+        "quantity": _round_metric(quantity) if quantity is not None else None,
+        "measurementUnit": str(row.get("measurementUnit")) if row.get("measurementUnit") not in (None, "") else None,
+        "balanceInMoney": _round_metric(balance) if balance is not None else None,
+        "currency": str(row.get("currency")) if row.get("currency") not in (None, "") else None,
+        "avgWeekdayExpense": _round_metric(avg_weekday) if avg_weekday is not None else None,
+        "avgWeekendExpense": _round_metric(avg_weekend) if avg_weekend is not None else None,
+        "daysUntilBalanceRunsOut": _round_metric(days_until_runout) if days_until_runout is not None else None,
+        "calculatedAt": str(row.get("calculatedAt")) if row.get("calculatedAt") not in (None, "") else None,
+        "isConfirmed": row.get("isConfirmed") if isinstance(row.get("isConfirmed"), bool) else None,
+    }
+
+
+def _empty_inventory_unit(unit_id: str, unit_name: str | None) -> dict[str, Any]:
+    return {
+        "unitId": unit_id,
+        "unitName": unit_name,
+        "itemCount": 0,
+        "totalBalanceInMoney": 0.0,
+        "lowStockItems": 0,
+        "zeroOrNegativeItems": 0,
+        "highStockItems": 0,
+        "unconfirmedItems": 0,
+        "nearestRunOutDays": None,
+    }
+
+
+def _add_inventory_item_to_unit(
+    unit: dict[str, Any],
+    item: dict[str, Any],
+    *,
+    low_stock_days_threshold: float,
+    high_stock_days_threshold: float,
+) -> None:
+    unit["itemCount"] += 1
+    unit["totalBalanceInMoney"] += float(item.get("balanceInMoney") or 0)
+    if item.get("unitName") and not unit.get("unitName"):
+        unit["unitName"] = item["unitName"]
+    if _is_low_stock_item(item, low_stock_days_threshold):
+        unit["lowStockItems"] += 1
+    if item.get("quantity") is not None and float(item["quantity"]) <= 0:
+        unit["zeroOrNegativeItems"] += 1
+    if _is_high_stock_item(item, high_stock_days_threshold):
+        unit["highStockItems"] += 1
+    if item.get("isConfirmed") is False:
+        unit["unconfirmedItems"] += 1
+    days = item.get("daysUntilBalanceRunsOut")
+    if _has_consumption(item) and days is not None:
+        current = unit.get("nearestRunOutDays")
+        unit["nearestRunOutDays"] = float(days) if current is None else min(float(current), float(days))
+
+
+def _finalize_inventory_unit(unit: dict[str, Any]) -> dict[str, Any]:
+    result = dict(unit)
+    result["totalBalanceInMoney"] = _round_metric(float(result["totalBalanceInMoney"]))
+    if result["nearestRunOutDays"] is not None:
+        result["nearestRunOutDays"] = _round_metric(float(result["nearestRunOutDays"]))
+    return result
+
+
+def _is_low_stock_item(item: dict[str, Any], threshold: float) -> bool:
+    days = item.get("daysUntilBalanceRunsOut")
+    if days is None:
+        return False
+    return float(days) <= threshold and (_has_consumption(item) or float(item.get("quantity") or 0) <= 0)
+
+
+def _is_high_stock_item(item: dict[str, Any], threshold: float) -> bool:
+    days = item.get("daysUntilBalanceRunsOut")
+    if days is None:
+        return False
+    return float(days) >= threshold and _has_consumption(item)
+
+
+def _has_consumption(item: dict[str, Any]) -> bool:
+    return float(item.get("avgWeekdayExpense") or 0) > 0 or float(item.get("avgWeekendExpense") or 0) > 0
+
+
+def _sort_inventory_low_stock(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        items,
+        key=lambda item: (
+            float(item.get("daysUntilBalanceRunsOut") or 0),
+            -float(item.get("balanceInMoney") or 0),
+            item.get("unitName") or "",
+            item.get("name") or "",
+        ),
+    )
+
+
+def _sort_inventory_high_stock(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        items,
+        key=lambda item: (
+            -float(item.get("daysUntilBalanceRunsOut") or 0),
+            -float(item.get("balanceInMoney") or 0),
+            item.get("unitName") or "",
+            item.get("name") or "",
+        ),
+    )
+
+
+def _sort_inventory_balance(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        items,
+        key=lambda item: (
+            -float(item.get("balanceInMoney") or 0),
+            item.get("unitName") or "",
+            item.get("name") or "",
+        ),
+    )
+
+
+def _optional_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().removesuffix("%").replace(",", ".")
+        if not normalized:
+            return None
+        try:
+            return float(normalized)
+        except ValueError:
+            return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def summarize_writeoff_product_rows(

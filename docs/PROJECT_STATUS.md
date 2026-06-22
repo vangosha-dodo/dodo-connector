@@ -87,6 +87,7 @@ separate explicit enablement path.
 - `GET /dodo/accounting/slices/writeoff-rate`
 - `GET /dodo/accounting/slices/daily-dynamics`
 - `GET /dodo/accounting/inventory-stocks`
+- `GET /dodo/accounting/inventory-stocks/summary`
 - `GET /dodo/accounting/stock-consumptions-by-period`
 - `GET /dodo/units/month-goals`
 - `GET /dodo/ratings/customer-experience`
@@ -171,6 +172,11 @@ is not allowed to read them.
     configurable threshold.
   - When `units` and `countryCode` are omitted, Bridge summarizes the configured
     pizzeria catalog instead of the full country.
+- Inventory stock summary:
+  - `GET /dodo/accounting/inventory-stocks/summary`
+  - Compactly returns total stock money, critical low-stock items, zero/negative
+    balances, high-stock items, and top balance-in-money items.
+  - `units` is optional; when omitted, Bridge uses all configured pizzerias.
 
 ### Superset read-only capabilities
 

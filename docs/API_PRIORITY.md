@@ -19,7 +19,8 @@ Reviewed on 2026-06-16 against the current Bridge code and live Dodo API access.
 3. `inventory_stocks`
    - Source: `GET /dodopizza/{country}/accounting/inventory-stocks`
    - Why: stock balance, money in stock, and `daysUntilBalanceRunsOut`.
-   - Status: implemented in Bridge.
+   - Status: implemented in Bridge; compact summary is exposed as
+     `GET /dodo/accounting/inventory-stocks/summary`.
 
 4. `staff_vacancies_count`
    - Source: `GET /dodopizza/{country}/staff/vacancies/count`

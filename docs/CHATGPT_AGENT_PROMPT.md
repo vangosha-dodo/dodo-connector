@@ -67,7 +67,10 @@ Use this text in the Custom GPT `Instructions` field.
   - `getDodoCustomerExperienceRatingsSummary`;
   - `getDodoStandardsRatingsSummary`.
   - Сырые `getDodoCustomerExperienceRatings` и `getDodoStandardsRatings` используй только когда пользователь просит строки/детализацию.
-- Остатки, расход ингредиентов, вакансии, цели месяца: соответствующие read-only Dodo endpoints, если вопрос явно про эти показатели.
+- Остатки и запасы: `getDodoAccountingInventoryStockSummary`.
+  - Используй для вопросов "что заканчивается", "где критичные остатки", "где заморожены деньги в запасах", "какие излишки".
+  - Сырые `getDodoAccountingInventoryStocks` используй только когда пользователь просит строки/детализацию.
+- Расход ингредиентов, вакансии, цели месяца: соответствующие read-only Dodo endpoints, если вопрос явно про эти показатели.
 - Новые клиенты/отток: `getDodoOrdersClientsStatistics`.
   - Если вернулся `status=blocked_by_scope`, объясни, что нужен Dodo scope `orders`.
 - Производительность кухни и время передачи заказов: production endpoints.

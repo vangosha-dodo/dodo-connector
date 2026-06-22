@@ -23,6 +23,7 @@ def test_dodo_functions_list(tmp_path) -> None:
     names = {item["name"] for item in response.json()["functions"]}
     assert "accounting_sales" in names
     assert "accounting_inventory_stocks" in names
+    assert "accounting_inventory_stocks_summary" in names
     assert "accounting_slice_writeoff_rate" in names
     assert "accounting_slice_daily_dynamics" in names
     assert "accounting_sales_channels_summary" in names
@@ -1526,6 +1527,169 @@ def test_dodo_accounting_inventory_stocks_paginates_and_projects(tmp_path, monke
         {"id": "i2", "quantity": 20, "daysUntilBalanceRunsOut": 5},
         {"id": "i3", "quantity": 30, "daysUntilBalanceRunsOut": 7},
     ]
+
+
+def test_dodo_accounting_inventory_stocks_summary_groups_risks(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        if parameters["skip"] == 0:
+            return {
+                "stocks": [
+                    {
+                        "id": "i1",
+                        "name": "Cheese",
+                        "unitId": "u1",
+                        "unitName": "One",
+                        "categoryName": "Ingredient",
+                        "quantity": 10,
+                        "measurementUnit": "Kilogram",
+                        "balanceInMoney": 1000,
+                        "currency": "RUB",
+                        "avgWeekdayExpense": 1,
+                        "avgWeekendExpense": 2,
+                        "daysUntilBalanceRunsOut": 2,
+                        "calculatedAt": "2026-06-22T10:00:00",
+                        "isConfirmed": True,
+                    },
+                    {
+                        "id": "i2",
+                        "name": "Box",
+                        "unitId": "u1",
+                        "unitName": "One",
+                        "quantity": 100,
+                        "measurementUnit": "Quantity",
+                        "balanceInMoney": 5000,
+                        "currency": "RUB",
+                        "avgWeekdayExpense": 2,
+                        "avgWeekendExpense": 3,
+                        "daysUntilBalanceRunsOut": 45,
+                        "calculatedAt": "2026-06-22T10:00:00",
+                        "isConfirmed": False,
+                    },
+                    {
+                        "id": "i3",
+                        "name": "Sauce",
+                        "unitId": "u2",
+                        "unitName": "Two",
+                        "quantity": 0,
+                        "measurementUnit": "Kilogram",
+                        "balanceInMoney": 0,
+                        "currency": "RUB",
+                        "avgWeekdayExpense": 1,
+                        "avgWeekendExpense": 1,
+                        "daysUntilBalanceRunsOut": 0,
+                        "calculatedAt": "2026-06-22T11:00:00",
+                        "isConfirmed": True,
+                    },
+                ]
+            }
+        return {
+            "stocks": [
+                {
+                    "id": "i4",
+                    "name": "Decor",
+                    "unitId": "u2",
+                    "unitName": "Two",
+                    "quantity": 20,
+                    "measurementUnit": "Quantity",
+                    "balanceInMoney": 2000,
+                    "currency": "RUB",
+                    "avgWeekdayExpense": 0,
+                    "avgWeekendExpense": 0,
+                    "daysUntilBalanceRunsOut": 0,
+                    "calculatedAt": "2026-06-22T11:00:00",
+                    "isConfirmed": True,
+                },
+                {
+                    "id": "i5",
+                    "name": "Meat",
+                    "unitId": "u2",
+                    "unitName": "Two",
+                    "quantity": 30,
+                    "measurementUnit": "Kilogram",
+                    "balanceInMoney": 8000,
+                    "currency": "RUB",
+                    "avgWeekdayExpense": 5,
+                    "avgWeekendExpense": 6,
+                    "daysUntilBalanceRunsOut": 7,
+                    "calculatedAt": "2026-06-22T11:00:00",
+                    "isConfirmed": True,
+                },
+            ]
+        }
+
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token")
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/accounting/inventory-stocks/summary",
+            params={
+                "units": "u1,u2",
+                "from": "2026-06-21",
+                "to": "2026-06-21",
+                "lowStockDaysThreshold": "3",
+                "highStockDaysThreshold": "21",
+                "topLimit": "2",
+                "take": "3",
+                "max_pages": "2",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "accounting_inventory_stocks_summary"
+    assert payload["source"] == {
+        "rows_key": "stocks",
+        "row_count": 5,
+        "pages_fetched": 2,
+        "truncated": False,
+        "next_skip": None,
+    }
+    assert payload["thresholds"] == {"lowStockDays": 3, "highStockDays": 21}
+    assert payload["total"] == {
+        "rowCount": 5,
+        "itemCount": 5,
+        "skippedRows": 0,
+        "totalBalanceInMoney": 16000,
+        "currencies": ["RUB"],
+        "lowStockItems": 2,
+        "zeroOrNegativeItems": 1,
+        "highStockItems": 1,
+        "unconfirmedItems": 1,
+        "latestCalculatedAt": "2026-06-22T11:00:00",
+    }
+    assert payload["units"] == [
+        {
+            "unitId": "u2",
+            "unitName": "Two",
+            "itemCount": 3,
+            "totalBalanceInMoney": 10000,
+            "lowStockItems": 1,
+            "zeroOrNegativeItems": 1,
+            "highStockItems": 0,
+            "unconfirmedItems": 0,
+            "nearestRunOutDays": 0,
+        },
+        {
+            "unitId": "u1",
+            "unitName": "One",
+            "itemCount": 2,
+            "totalBalanceInMoney": 6000,
+            "lowStockItems": 1,
+            "zeroOrNegativeItems": 0,
+            "highStockItems": 1,
+            "unconfirmedItems": 1,
+            "nearestRunOutDays": 2,
+        },
+    ]
+    assert [item["name"] for item in payload["criticalItems"]] == ["Sauce", "Cheese"]
+    assert [item["name"] for item in payload["zeroOrNegativeItems"]] == ["Sauce"]
+    assert [item["name"] for item in payload["highStockItems"]] == ["Box"]
+    assert [item["name"] for item in payload["topBalanceItems"]] == ["Meat", "Box"]
 
 
 def test_dodo_accounting_stock_consumptions_by_period_dry_run(tmp_path) -> None:
