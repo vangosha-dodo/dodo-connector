@@ -1194,6 +1194,7 @@ class DodoDataService:
             low_stock_days_threshold=low_stock_days_threshold,
             high_stock_days_threshold=high_stock_days_threshold,
             top_limit=top_limit,
+            unit_names_by_id=_configured_unit_names_by_id(self.settings),
         )
         return {
             "function": function.name,
@@ -1696,12 +1697,26 @@ def _first_non_empty(row: dict[str, Any], keys: tuple[str, ...]) -> str | None:
     return None
 
 
+def _configured_unit_names_by_id(settings: Settings) -> dict[str, str]:
+    pizzerias = load_pizzerias(settings.dodo_pizzerias_path).get("pizzerias", [])
+    result: dict[str, str] = {}
+    for item in pizzerias:
+        unit_id = str(item.get("unit_id") or "")
+        name = str(item.get("name") or "")
+        if not unit_id or not name:
+            continue
+        result[unit_id] = name
+        result[unit_id.casefold()] = name
+    return result
+
+
 def summarize_inventory_stock_rows(
     rows: list[Any],
     *,
     low_stock_days_threshold: float,
     high_stock_days_threshold: float,
     top_limit: int,
+    unit_names_by_id: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     units: dict[str, dict[str, Any]] = {}
     items: list[dict[str, Any]] = []
@@ -1714,7 +1729,7 @@ def summarize_inventory_stock_rows(
             skipped_rows += 1
             continue
 
-        item = _inventory_stock_item(row)
+        item = _inventory_stock_item(row, unit_names_by_id=unit_names_by_id)
         items.append(item)
         if item.get("currency"):
             currencies.add(str(item["currency"]))
@@ -1780,15 +1795,23 @@ def summarize_inventory_stock_rows(
     }
 
 
-def _inventory_stock_item(row: dict[str, Any]) -> dict[str, Any]:
+def _inventory_stock_item(
+    row: dict[str, Any],
+    *,
+    unit_names_by_id: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    unit_id = _first_non_empty(row, INVENTORY_UNIT_ID_KEYS)
+    unit_name = _first_non_empty(row, INVENTORY_UNIT_NAME_KEYS)
+    if unit_id and not unit_name and unit_names_by_id:
+        unit_name = unit_names_by_id.get(unit_id) or unit_names_by_id.get(unit_id.casefold())
     quantity = _optional_float(row.get("quantity"))
     balance = _optional_float(row.get("balanceInMoney"))
     avg_weekday = _optional_float(row.get("avgWeekdayExpense"))
     avg_weekend = _optional_float(row.get("avgWeekendExpense"))
     days_until_runout = _optional_float(row.get("daysUntilBalanceRunsOut"))
     return {
-        "unitId": _first_non_empty(row, INVENTORY_UNIT_ID_KEYS),
-        "unitName": _first_non_empty(row, INVENTORY_UNIT_NAME_KEYS),
+        "unitId": unit_id,
+        "unitName": unit_name,
         "itemId": str(row.get("id")) if row.get("id") not in (None, "") else None,
         "name": _first_non_empty(row, INVENTORY_STOCK_NAME_KEYS),
         "categoryName": str(row.get("categoryName")) if row.get("categoryName") not in (None, "") else None,
