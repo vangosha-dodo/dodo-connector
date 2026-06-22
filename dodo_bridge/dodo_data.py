@@ -1512,6 +1512,8 @@ def project_rows(rows: list[Any], fields: list[str] | None) -> list[Any]:
 
 RATING_VALUE_KEYS = (
     "rate",
+    "avgRate",
+    "averageRate",
     "rating",
     "score",
     "value",

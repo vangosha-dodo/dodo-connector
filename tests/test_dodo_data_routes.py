@@ -1874,7 +1874,7 @@ def test_dodo_ratings_standards_summary_aggregates_scores(tmp_path, monkeypatch)
             **base,
             "unitRates": [
                 {"unitId": "u4", "unitName": "Four", "rate": 70},
-                {"unitId": "u5", "unitName": "Five", "rate": None},
+                {"unitId": "u5", "unitName": "Five", "rate": None, "avgRate": 85},
             ],
         }
 
@@ -1915,9 +1915,9 @@ def test_dodo_ratings_standards_summary_aggregates_scores(tmp_path, monkeypatch)
     assert payload["threshold"] == {"lowRate": 75}
     assert payload["total"] == {
         "rowCount": 5,
-        "ratedUnits": 4,
-        "unscoredRows": 1,
-        "averageRate": 75,
+        "ratedUnits": 5,
+        "unscoredRows": 0,
+        "averageRate": 77,
         "minRate": 60,
         "maxRate": 90,
         "belowThresholdUnits": 2,
@@ -1928,7 +1928,7 @@ def test_dodo_ratings_standards_summary_aggregates_scores(tmp_path, monkeypatch)
     ]
     assert payload["highestUnits"] == [
         {"unitId": "u1", "unitName": "One", "rate": 90, "rateField": "rate"},
-        {"unitId": "u2", "unitName": "Two", "rate": 80, "rateField": "score"},
+        {"unitId": "u5", "unitName": "Five", "rate": 85, "rateField": "avgRate"},
     ]
     assert [unit["unitName"] for unit in payload["belowThreshold"]] == ["Three", "Four"]
 
