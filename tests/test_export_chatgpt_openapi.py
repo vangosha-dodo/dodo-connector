@@ -22,6 +22,7 @@ def test_chatgpt_openapi_contains_expected_paths() -> None:
         "/dodo/staff/shifts",
         "/dodo/staff/vacancies/count",
         "/dodo/delivery/statistics",
+        "/dodo/delivery/courier-productivity/summary",
         "/dodo/orders/clients-statistics",
         "/dodo/production/productivity",
         "/dodo/production/orders-handover-time",
@@ -357,6 +358,18 @@ def test_chatgpt_openapi_includes_staff_vacancy_counts() -> None:
 
     operation = schema["paths"]["/dodo/staff/vacancies/count"]["get"]
     assert operation["operationId"] == "getDodoStaffVacancyCounts"
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/DodoDataResponse"
+    }
+
+
+def test_chatgpt_openapi_includes_courier_productivity_summary() -> None:
+    schema = build_schema("https://bridge.example.com")
+
+    operation = schema["paths"]["/dodo/delivery/courier-productivity/summary"]["get"]
+    assert operation["operationId"] == "getDodoDeliveryCourierProductivitySummary"
+    parameter_names = {item["name"] for item in operation["parameters"]}
+    assert {"units", "from", "to", "topLimit", "dry_run"} <= parameter_names
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/DodoDataResponse"
     }

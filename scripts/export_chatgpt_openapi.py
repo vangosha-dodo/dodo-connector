@@ -669,6 +669,29 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "responses": data_response("Delivery statistics rows."),
                 }
             },
+            "/dodo/delivery/courier-productivity/summary": {
+                "get": {
+                    "operationId": "getDodoDeliveryCourierProductivitySummary",
+                    "summary": "Get courier productivity summary",
+                    "description": (
+                        "Summarize courier productivity from Dodo delivery statistics. "
+                        "Read-only formula: delivery orders divided by courier shift hours."
+                    ),
+                    "parameters": [
+                        COMPACT_UNITS_PARAMETER,
+                        *COMMON_PERIOD_PARAMETERS[1:3],
+                        {
+                            "name": "topLimit",
+                            "in": "query",
+                            "required": False,
+                            "description": "How many best/worst units to return.",
+                            "schema": {"type": "integer", "minimum": 1, "maximum": 50, "default": 5},
+                        },
+                        COMMON_PERIOD_PARAMETERS[4],
+                    ],
+                    "responses": data_response("Courier productivity summary."),
+                }
+            },
             "/dodo/orders/clients-statistics": {
                 "get": {
                     "operationId": "getDodoOrdersClientsStatistics",

@@ -54,6 +54,13 @@ FUNCTIONS: dict[str, DodoDataFunction] = {
         row_keys=("unitsStatistics", "deliveryStatistics", "statistics", "items"),
         paginated=False,
     ),
+    "delivery_courier_productivity_summary": DodoDataFunction(
+        name="delivery_courier_productivity_summary",
+        tool_name="dodo_delivery_statistics",
+        description="Compact courier productivity summary from delivery statistics.",
+        row_keys=("unitsStatistics", "deliveryStatistics", "statistics", "items"),
+        paginated=False,
+    ),
     "orders_clients_statistics": DodoDataFunction(
         name="orders_clients_statistics",
         tool_name="dodo_orders_clients_statistics",
@@ -1276,6 +1283,64 @@ class DodoDataService:
             **summary,
         }
 
+    async def fetch_delivery_courier_productivity_summary(
+        self,
+        *,
+        parameters: dict[str, Any],
+        dry_run: bool,
+        top_limit: int,
+    ) -> dict[str, Any]:
+        function = FUNCTIONS["delivery_courier_productivity_summary"]
+        tool = self._allowed_tool(function, parameters, dry_run)
+
+        if dry_run:
+            request = self.connector.build_request(tool, parameters)
+            return {
+                "function": function.name,
+                "tool_name": tool.name,
+                "dry_run": True,
+                "request": request,
+                "topLimit": top_limit,
+                "formula": (
+                    "ordersPerCourierHour = deliveryOrdersCount / "
+                    "(couriersShiftsDurationSeconds / 3600)"
+                ),
+            }
+
+        rows_result = await self.fetch(
+            function_name="delivery_statistics",
+            parameters=parameters,
+            dry_run=False,
+            fields=None,
+            take=None,
+            max_pages=None,
+        )
+        rows = rows_result.get("rows")
+        if rows is None:
+            return {
+                "function": function.name,
+                "tool_name": rows_result.get("tool_name", tool.name),
+                "source": _source_meta(rows_result),
+                "response": rows_result.get("response"),
+            }
+
+        summary = summarize_delivery_courier_productivity_rows(
+            rows,
+            top_limit=top_limit,
+            unit_names_by_id=_configured_unit_names_by_id(self.settings),
+        )
+        return {
+            "function": function.name,
+            "tool_name": rows_result.get("tool_name", tool.name),
+            "topLimit": top_limit,
+            "formula": (
+                "ordersPerCourierHour = deliveryOrdersCount / "
+                "(couriersShiftsDurationSeconds / 3600)"
+            ),
+            "source": _source_meta(rows_result),
+            **summary,
+        }
+
     async def _fetch_rows_for_summary(
         self,
         *,
@@ -1682,6 +1747,8 @@ STOCK_CONSUMPTION_ITEM_NAME_KEYS = ("stockItemName", "name", "productName", "ing
 STOCK_CONSUMPTION_ITEM_ID_KEYS = ("stockItemId", "id")
 STOCK_CONSUMPTION_UNIT_ID_KEYS = ("unitId", "unitUUId", "unitUuid", "unitUUID")
 STOCK_CONSUMPTION_UNIT_NAME_KEYS = ("unitName", "pizzeriaName")
+DELIVERY_UNIT_ID_KEYS = ("unitId", "unitUUId", "unitUuid", "unitUUID", "id")
+DELIVERY_UNIT_NAME_KEYS = ("unitName", "name", "pizzeriaName")
 
 
 def summarize_rating_rows(
@@ -1780,6 +1847,123 @@ def _configured_unit_names_by_id(settings: Settings) -> dict[str, str]:
         result[unit_id] = name
         result[unit_id.casefold()] = name
     return result
+
+
+def summarize_delivery_courier_productivity_rows(
+    rows: list[Any],
+    *,
+    top_limit: int,
+    unit_names_by_id: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    unit_names_by_id = unit_names_by_id or {}
+    units: list[dict[str, Any]] = []
+    total = {
+        "rowCount": len(rows),
+        "unitCount": 0,
+        "deliveryOrdersCount": 0.0,
+        "deliverySales": 0.0,
+        "tripsCount": 0.0,
+        "lateOrdersCount": 0.0,
+        "couriersShiftsDurationSeconds": 0.0,
+    }
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        unit_id = _first_non_empty(row, DELIVERY_UNIT_ID_KEYS)
+        unit_name = _first_non_empty(row, DELIVERY_UNIT_NAME_KEYS)
+        if unit_id and not unit_name:
+            unit_name = unit_names_by_id.get(unit_id) or unit_names_by_id.get(unit_id.casefold())
+
+        delivery_orders = _as_float(row.get("deliveryOrdersCount"))
+        delivery_sales = _as_float(row.get("deliverySales"))
+        trips = _as_float(row.get("tripsCount"))
+        late_orders = _as_float(row.get("lateOrdersCount"))
+        shifts_duration_seconds = _as_float(row.get("couriersShiftsDuration"))
+        shift_hours = shifts_duration_seconds / 3600 if shifts_duration_seconds else 0
+
+        total["deliveryOrdersCount"] += delivery_orders
+        total["deliverySales"] += delivery_sales
+        total["tripsCount"] += trips
+        total["lateOrdersCount"] += late_orders
+        total["couriersShiftsDurationSeconds"] += shifts_duration_seconds
+
+        units.append(
+            {
+                "unitId": unit_id,
+                "unitName": unit_name,
+                "deliveryOrdersCount": _round_metric(delivery_orders),
+                "deliverySales": _round_metric(delivery_sales),
+                "tripsCount": _round_metric(trips),
+                "lateOrdersCount": _round_metric(late_orders),
+                "couriersShiftsDurationSeconds": _round_metric(shifts_duration_seconds),
+                "courierShiftHours": _round_metric(shift_hours),
+                "ordersPerCourierHour": _round_metric(delivery_orders / shift_hours) if shift_hours else None,
+                "tripsPerCourierHour": _round_metric(trips / shift_hours) if shift_hours else None,
+                "lateOrdersSharePercent": _round_metric(late_orders / delivery_orders * 100)
+                if delivery_orders
+                else None,
+                "avgDeliveryOrderFulfillmentMinutes": _seconds_to_minutes(
+                    row.get("avgDeliveryOrderFulfillmentTime")
+                ),
+                "avgCookingMinutes": _seconds_to_minutes(row.get("avgCookingTime")),
+                "avgHeatedShelfMinutes": _seconds_to_minutes(row.get("avgHeatedShelfTime")),
+                "avgOrderTripMinutes": _seconds_to_minutes(row.get("avgOrderTripTime")),
+            }
+        )
+
+    total["unitCount"] = len(units)
+    total_shift_hours = total["couriersShiftsDurationSeconds"] / 3600
+    total_result = {
+        "rowCount": int(total["rowCount"]),
+        "unitCount": int(total["unitCount"]),
+        "deliveryOrdersCount": _round_metric(total["deliveryOrdersCount"]),
+        "deliverySales": _round_metric(total["deliverySales"]),
+        "tripsCount": _round_metric(total["tripsCount"]),
+        "lateOrdersCount": _round_metric(total["lateOrdersCount"]),
+        "couriersShiftsDurationSeconds": _round_metric(total["couriersShiftsDurationSeconds"]),
+        "courierShiftHours": _round_metric(total_shift_hours),
+        "ordersPerCourierHour": _round_metric(total["deliveryOrdersCount"] / total_shift_hours)
+        if total_shift_hours
+        else None,
+        "tripsPerCourierHour": _round_metric(total["tripsCount"] / total_shift_hours)
+        if total_shift_hours
+        else None,
+        "lateOrdersSharePercent": _round_metric(total["lateOrdersCount"] / total["deliveryOrdersCount"] * 100)
+        if total["deliveryOrdersCount"]
+        else None,
+    }
+
+    units.sort(key=lambda item: str(item.get("unitName") or item.get("unitId") or ""))
+    ranked_units = [unit for unit in units if unit.get("ordersPerCourierHour") is not None]
+    lowest = sorted(
+        ranked_units,
+        key=lambda item: (
+            float(item["ordersPerCourierHour"]),
+            str(item.get("unitName") or item.get("unitId") or ""),
+        ),
+    )[:top_limit]
+    highest = sorted(
+        ranked_units,
+        key=lambda item: (
+            -float(item["ordersPerCourierHour"]),
+            str(item.get("unitName") or item.get("unitId") or ""),
+        ),
+    )[:top_limit]
+
+    return {
+        "total": total_result,
+        "units": units,
+        "lowestProductivityUnits": lowest,
+        "highestProductivityUnits": highest,
+    }
+
+
+def _seconds_to_minutes(value: Any) -> int | float | None:
+    seconds = _as_float(value)
+    if not seconds:
+        return None
+    return _round_metric(seconds / 60)
 
 
 def summarize_inventory_stock_rows(

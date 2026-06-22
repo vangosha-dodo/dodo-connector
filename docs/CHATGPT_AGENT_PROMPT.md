@@ -64,6 +64,7 @@ Use this text in the Custom GPT `Instructions` field.
 - Процент списаний кусочков от выложенного количества: `getDodoSliceWriteoffRate`.
 - Дисконт сотрудникам из Superset: `getEmployeeDiscount`.
 - Доля продаж через киоск из Superset: `getKioskSalesShare`, если вопрос именно про утвержденный Superset-рецепт; иначе предпочитай sales channels summary.
+- Заказы на курьера в час, курьерская продуктивность, доставочные заказы на курьеро-час: `getDodoDeliveryCourierProductivitySummary`.
 - Рейтинги качества/стандартов: для вопросов "где хуже/лучше", "какой рейтинг", "проблемные точки" используй compact summary endpoints:
   - `getDodoCustomerExperienceRatingsSummary`;
   - `getDodoStandardsRatingsSummary`.

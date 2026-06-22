@@ -33,6 +33,7 @@ def test_dodo_functions_list(tmp_path) -> None:
     assert "accounting_stock_consumptions_by_period_summary" in names
     assert "accounting_writeoffs_products_summary" in names
     assert "courier_orders" in names
+    assert "delivery_courier_productivity_summary" in names
     assert "orders_clients_statistics" in names
     assert "production_orders_handover_time" in names
     assert "production_productivity" in names
@@ -127,6 +128,151 @@ def test_dodo_staff_shifts_dry_run_uses_exclusive_clock_in_to(tmp_path) -> None:
     assert "clockInTo=2026-06-22" in payload["request"]["url"]
     assert "staffTypeName=Courier" in payload["request"]["url"]
     assert "take=10" in payload["request"]["url"]
+
+
+def test_dodo_courier_orders_dry_run_uses_exclusive_to(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/delivery/courier-orders",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-21",
+                "to": "2026-06-21",
+                "dry_run": "true",
+                "take": "10",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "courier_orders"
+    assert payload["dry_run"] is True
+    assert "/delivery/couriers-orders" in payload["request"]["url"]
+    assert "from=2026-06-21" in payload["request"]["url"]
+    assert "to=2026-06-22" in payload["request"]["url"]
+    assert "take=10" in payload["request"]["url"]
+
+
+def test_dodo_delivery_statistics_dry_run_uses_exclusive_to(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/delivery/statistics",
+            params={
+                "units": "unit-1",
+                "from": "2026-06-21",
+                "to": "2026-06-21",
+                "dry_run": "true",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "delivery_statistics"
+    assert payload["dry_run"] is True
+    assert "/delivery/statistics" in payload["request"]["url"]
+    assert "from=2026-06-21" in payload["request"]["url"]
+    assert "to=2026-06-22" in payload["request"]["url"]
+
+
+def test_dodo_delivery_courier_productivity_summary(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        assert parameters["units"] == "u1,u2"
+        assert parameters["from"] == "2026-06-21"
+        assert parameters["to"] == "2026-06-22"
+        return {
+            "unitsStatistics": [
+                {
+                    "unitId": "u1",
+                    "unitName": "One",
+                    "deliverySales": 1000,
+                    "deliveryOrdersCount": 20,
+                    "tripsCount": 8,
+                    "lateOrdersCount": 2,
+                    "couriersShiftsDuration": 7200,
+                    "avgDeliveryOrderFulfillmentTime": 1500,
+                    "avgCookingTime": 600,
+                    "avgHeatedShelfTime": 60,
+                    "avgOrderTripTime": 840,
+                },
+                {
+                    "unitId": "u2",
+                    "unitName": "Two",
+                    "deliverySales": 500,
+                    "deliveryOrdersCount": 10,
+                    "tripsCount": 4,
+                    "lateOrdersCount": 0,
+                    "couriersShiftsDuration": 3600,
+                    "avgDeliveryOrderFulfillmentTime": 1200,
+                    "avgCookingTime": 540,
+                    "avgHeatedShelfTime": 30,
+                    "avgOrderTripTime": 630,
+                },
+            ]
+        }
+
+    pizzerias_path = tmp_path / "pizzerias.json"
+    pizzerias_path.write_text(
+        json.dumps(
+            {
+                "units": [
+                    {"id": "u1", "name": "One", "unitType": 1},
+                    {"id": "u2", "name": "Two", "unitType": 1},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(tmp_path, dodo_access_token="token", dodo_pizzerias_path=pizzerias_path)
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/delivery/courier-productivity/summary",
+            params={
+                "from": "2026-06-21",
+                "to": "2026-06-21",
+                "topLimit": "2",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["function"] == "delivery_courier_productivity_summary"
+    assert payload["formula"] == (
+        "ordersPerCourierHour = deliveryOrdersCount / "
+        "(couriersShiftsDurationSeconds / 3600)"
+    )
+    assert payload["source"]["rows_key"] == "unitsStatistics"
+    assert payload["total"] == {
+        "rowCount": 2,
+        "unitCount": 2,
+        "deliveryOrdersCount": 30,
+        "deliverySales": 1500,
+        "tripsCount": 12,
+        "lateOrdersCount": 2,
+        "couriersShiftsDurationSeconds": 10800,
+        "courierShiftHours": 3,
+        "ordersPerCourierHour": 10,
+        "tripsPerCourierHour": 4,
+        "lateOrdersSharePercent": 6.67,
+    }
+    assert payload["units"][0]["ordersPerCourierHour"] == 10
+    assert payload["units"][0]["avgDeliveryOrderFulfillmentMinutes"] == 25
+    assert payload["units"][1]["avgOrderTripMinutes"] == 10.5
 
 
 def test_dodo_production_productivity_dry_run(tmp_path) -> None:
@@ -2094,6 +2240,54 @@ def test_dodo_staff_vacancies_count_paginates_and_projects(tmp_path, monkeypatch
         {"id": "u2", "vacanciesCount": 2},
         {"id": "u3", "vacanciesCount": 1},
     ]
+
+
+def test_dodo_staff_vacancies_count_fills_missing_requested_units(tmp_path, monkeypatch) -> None:
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        del self, tool, dry_run
+        assert parameters["units"] == "u1,u2"
+        return {"vacancies": [{"id": "u1", "name": "One", "vacanciesCount": 4}]}
+
+    pizzerias_path = tmp_path / "pizzerias.json"
+    pizzerias_path.write_text(
+        json.dumps(
+            {
+                "units": [
+                    {"id": "u1", "name": "One", "unitType": 1},
+                    {"id": "u2", "name": "Two", "unitType": 1},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(DodoConnector, "invoke", fake_invoke)
+    settings = make_settings(
+        tmp_path,
+        dodo_access_token="token",
+        dodo_pizzerias_path=pizzerias_path,
+    )
+    app.dependency_overrides[dodo_data_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get(
+            "/dodo/staff/vacancies/count",
+            params={
+                "units": "u1,u2",
+                "fields": "id,name,vacanciesCount",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["row_count"] == 2
+    assert payload["filled_missing_units"] == 1
+    assert payload["rows"] == [
+        {"id": "u1", "name": "One", "vacanciesCount": 4},
+        {"id": "u2", "name": "Two", "vacanciesCount": 0},
+    ]
+    assert "zero vacancies" in payload["notes"][0]
 
 
 def test_dodo_data_rejects_too_large_period(tmp_path) -> None:

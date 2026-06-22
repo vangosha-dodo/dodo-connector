@@ -53,6 +53,9 @@ Uses:
 GET /dodopizza/{country}/delivery/couriers-orders
 ```
 
+The public `to` date is inclusive; Bridge sends Dodo `to` as the next day so
+same-day reports return that full business day.
+
 ### Staff Shifts
 
 ```http
@@ -89,6 +92,10 @@ GET /dodopizza/{country}/staff/vacancies/count
 Returns vacancy rows with `id`, `name`, `address`, `vacanciesCount`,
 `location`, `countryId`, and `businessId`.
 
+When `units` is passed, Dodo can omit units with zero open vacancies. Bridge
+fills requested missing units with `vacanciesCount=0` and reports the count in
+`filled_missing_units`.
+
 ### Delivery Statistics
 
 ```http
@@ -99,6 +106,24 @@ Uses:
 
 ```text
 GET /dodopizza/{country}/delivery/statistics
+```
+
+The public `to` date is inclusive; Bridge sends Dodo `to` as the next day so
+same-day delivery summaries return rows instead of an empty result.
+
+### Courier Productivity Summary
+
+```http
+GET /dodo/delivery/courier-productivity/summary?from=2026-06-21&to=2026-06-21
+```
+
+Uses `delivery/statistics` and returns a compact read-only productivity summary
+for all configured pizzerias or selected `units`.
+
+Formula:
+
+```text
+ordersPerCourierHour = deliveryOrdersCount / (couriersShiftsDurationSeconds / 3600)
 ```
 
 ### Orders Clients Statistics

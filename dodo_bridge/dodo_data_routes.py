@@ -116,7 +116,7 @@ async def courier_orders(
     dry_run: bool = Query(default=False),
     context: RouteContext = Depends(),
 ) -> dict[str, Any]:
-    params = _period_params(context.settings, units, from_date, to_date)
+    params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
     return await _fetch(
         context,
         function_name="courier_orders",
@@ -174,7 +174,7 @@ async def staff_vacancies_count(
     context: RouteContext = Depends(),
 ) -> dict[str, Any]:
     params = _optional_unit_country_params(units=units, country_code=country_code)
-    return await _fetch(
+    result = await _fetch(
         context,
         function_name="staff_vacancies_count",
         parameters=params,
@@ -183,6 +183,14 @@ async def staff_vacancies_count(
         take=take,
         max_pages=max_pages,
     )
+    if units and not dry_run:
+        _fill_missing_vacancy_rows(
+            result,
+            units=normalize_units(units),
+            settings=context.settings,
+            fields=parse_fields(fields),
+        )
+    return result
 
 
 @router.get("/delivery/statistics")
@@ -194,7 +202,7 @@ async def delivery_statistics(
     dry_run: bool = Query(default=False),
     context: RouteContext = Depends(),
 ) -> dict[str, Any]:
-    params = _period_params(context.settings, units, from_date, to_date)
+    params = _period_params(context.settings, units, from_date, to_date, exclusive_to=True)
     return await _fetch(
         context,
         function_name="delivery_statistics",
@@ -204,6 +212,49 @@ async def delivery_statistics(
         take=None,
         max_pages=None,
     )
+
+
+@router.get("/delivery/courier-productivity/summary")
+async def delivery_courier_productivity_summary(
+    units: str | None = Query(
+        default=None,
+        description="Optional comma-separated Dodo unit ids. Omit for all configured pizzerias.",
+    ),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    top_limit: int = Query(
+        default=5,
+        alias="topLimit",
+        ge=1,
+        le=50,
+        description="How many best/worst units to return.",
+    ),
+    dry_run: bool = Query(default=False),
+    context: RouteContext = Depends(),
+) -> dict[str, Any]:
+    params = _period_params(
+        context.settings,
+        _units_or_all_pizzerias(context.settings, units),
+        from_date,
+        to_date,
+        exclusive_to=True,
+    )
+    result = await context.service.fetch_delivery_courier_productivity_summary(
+        parameters=params,
+        dry_run=dry_run,
+        top_limit=top_limit,
+    )
+    _record_dodo_audit(
+        context,
+        function_name="delivery_courier_productivity_summary",
+        parameters={**params, "topLimit": top_limit},
+        dry_run=dry_run,
+        fields=None,
+        take=None,
+        max_pages=None,
+        result=result,
+    )
+    return result
 
 
 @router.get("/orders/clients-statistics")
@@ -1145,6 +1196,62 @@ def _optional_unit_country_params(*, units: str | None, country_code: int | None
     if country_code is not None:
         params["countryCode"] = country_code
     return params
+
+
+def _fill_missing_vacancy_rows(
+    result: dict[str, Any],
+    *,
+    units: str,
+    settings: Settings,
+    fields: list[str] | None,
+) -> None:
+    rows = result.get("rows")
+    if not isinstance(rows, list):
+        return
+
+    requested_units = [unit.strip() for unit in units.split(",") if unit.strip()]
+    if not requested_units:
+        return
+
+    pizzerias = load_pizzerias(settings.dodo_pizzerias_path).get("pizzerias", [])
+    unit_names = {
+        str(item["unit_id"]).lower(): str(item["name"])
+        for item in pizzerias
+        if item.get("unit_id") and item.get("name")
+    }
+    seen_units = {
+        str(row.get("id") or row.get("unitId") or row.get("unit_id") or "").lower()
+        for row in rows
+        if isinstance(row, dict)
+    }
+
+    missing_rows: list[dict[str, Any]] = []
+    for unit_id in requested_units:
+        if unit_id.lower() in seen_units:
+            continue
+        row = {
+            "id": unit_id,
+            "name": unit_names.get(unit_id.lower(), unit_id),
+            "vacanciesCount": 0,
+        }
+        missing_rows.append(_project_row(row, fields))
+
+    if not missing_rows:
+        return
+
+    rows.extend(missing_rows)
+    result["row_count"] = len(rows)
+    result["filled_missing_units"] = len(missing_rows)
+    result["notes"] = [
+        *result.get("notes", []),
+        "Dodo may omit units with zero vacancies; Bridge filled requested missing units with vacanciesCount=0.",
+    ]
+
+
+def _project_row(row: dict[str, Any], fields: list[str] | None) -> dict[str, Any]:
+    if not fields:
+        return row
+    return {field: row.get(field) for field in fields if field in row}
 
 
 async def _fetch(
