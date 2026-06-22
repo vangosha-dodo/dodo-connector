@@ -334,6 +334,8 @@ Goal: make the agent reliably choose compact endpoints.
 
 Actions:
 
+- Current prompt draft:
+  - `docs/CHATGPT_AGENT_PROMPT.md`
 - Import the latest schema from:
   - `https://dock-translations-investigated-basketball.trycloudflare.com/chatgpt/openapi.yaml`
 - Update the agent prompt:
