@@ -30,7 +30,8 @@ primary `Instructions` field short and use this file for extra routing details.
 ## Summary First
 
 Prefer compact/summary endpoints for management analytics. Use raw endpoints
-only for explicit row-level requests.
+only for explicit row-level requests. The Custom GPT OpenAPI schema intentionally
+omits heavy raw endpoints when a compact summary endpoint exists.
 
 ## Action Routing
 
@@ -91,7 +92,6 @@ only for explicit row-level requests.
 
 - `getDodoCustomerExperienceRatingsSummary`
 - `getDodoStandardsRatingsSummary`
-- Raw rating endpoints are only for row-level detail.
 
 ### Inventory And Consumption
 

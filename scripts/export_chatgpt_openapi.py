@@ -569,18 +569,6 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ),
                 }
             },
-            "/dodo/ratings/customer-experience": {
-                "get": {
-                    "operationId": "getDodoCustomerExperienceRatings",
-                    "summary": "Get customer experience ratings",
-                    "description": (
-                        "Read Dodo IS customer experience ratings by unit or by country. "
-                        "Provide either units or countryCode."
-                    ),
-                    "parameters": RATINGS_PARAMETERS,
-                    "responses": data_response("Customer experience rating rows."),
-                }
-            },
             "/dodo/ratings/customer-experience/summary": {
                 "get": {
                     "operationId": "getDodoCustomerExperienceRatingsSummary",
@@ -594,18 +582,6 @@ def build_schema(server_url: str) -> dict[str, Any]:
                         "Customer experience rating summary.",
                         "#/components/schemas/DodoRatingsSummaryResponse",
                     ),
-                }
-            },
-            "/dodo/ratings/standards": {
-                "get": {
-                    "operationId": "getDodoStandardsRatings",
-                    "summary": "Get standards ratings",
-                    "description": (
-                        "Read Dodo IS standards ratings by unit or by country. "
-                        "Provide either units or countryCode."
-                    ),
-                    "parameters": RATINGS_PARAMETERS,
-                    "responses": data_response("Standards rating rows."),
                 }
             },
             "/dodo/ratings/standards/summary": {
@@ -728,19 +704,6 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     "responses": data_response("Order handover time rows."),
                 }
             },
-            "/dodo/accounting/sales": {
-                "get": {
-                    "operationId": "getDodoAccountingSales",
-                    "summary": "Get accounting sales",
-                    "description": (
-                        "Read raw Dodo IS accounting sales rows for selected units and period. "
-                        "Do not use this for broad revenue questions across many pizzerias or a full month; "
-                        "use getDodoAccountingSalesSummary instead."
-                    ),
-                    "parameters": COMMON_PERIOD_PARAMETERS + PAGINATION_PARAMETERS,
-                    "responses": data_response("Accounting sales rows."),
-                }
-            },
             "/dodo/accounting/sales/summary": {
                 "get": {
                     "operationId": "getDodoAccountingSalesSummary",
@@ -803,15 +766,6 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ),
                 }
             },
-            "/dodo/accounting/writeoffs/products": {
-                "get": {
-                    "operationId": "getDodoAccountingProductWriteoffs",
-                    "summary": "Get product write-offs",
-                    "description": "Read Dodo IS product write-off rows for selected units and period.",
-                    "parameters": COMMON_PERIOD_PARAMETERS + PAGINATION_PARAMETERS,
-                    "responses": data_response("Product write-off rows."),
-                }
-            },
             "/dodo/accounting/writeoffs/products/summary": {
                 "get": {
                     "operationId": "getDodoAccountingProductWriteoffSummary",
@@ -860,17 +814,6 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ),
                 }
             },
-            "/dodo/accounting/inventory-stocks": {
-                "get": {
-                    "operationId": "getDodoAccountingInventoryStocks",
-                    "summary": "Get inventory stocks",
-                    "description": (
-                        "Read Dodo IS inventory stock balances for selected units and period."
-                    ),
-                    "parameters": COMMON_PERIOD_PARAMETERS + PAGINATION_PARAMETERS,
-                    "responses": data_response("Inventory stock rows."),
-                }
-            },
             "/dodo/accounting/inventory-stocks/summary": {
                 "get": {
                     "operationId": "getDodoAccountingInventoryStockSummary",
@@ -884,17 +827,6 @@ def build_schema(server_url: str) -> dict[str, Any]:
                         "Inventory stock risk summary.",
                         "#/components/schemas/DodoInventoryStocksSummaryResponse",
                     ),
-                }
-            },
-            "/dodo/accounting/stock-consumptions-by-period": {
-                "get": {
-                    "operationId": "getDodoAccountingStockConsumptionsByPeriod",
-                    "summary": "Get stock consumptions by period",
-                    "description": (
-                        "Read Dodo IS ingredient stock consumption rows for selected units and period."
-                    ),
-                    "parameters": COMMON_PERIOD_PARAMETERS + PAGINATION_PARAMETERS,
-                    "responses": data_response("Stock consumption rows."),
                 }
             },
             "/dodo/accounting/stock-consumptions-by-period/summary": {
