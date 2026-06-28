@@ -41,6 +41,11 @@ The endpoint uses JSON-RPC 2.0 request and response envelopes.
     - `accounting_slice_daily_dynamics`
     - `accounting_sales_channels_summary`
     - `accounting_sales_discounts_summary`
+    - `accounting_inventory_stocks_summary`
+    - `accounting_stock_consumptions_by_period_summary`
+    - `ratings_customer_experience_summary`
+    - `ratings_standards_summary`
+    - `delivery_courier_productivity_summary`
 - `superset_query`
   - Runs approved Superset recipes by capability name.
   - Enabled capabilities:

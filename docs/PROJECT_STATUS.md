@@ -52,7 +52,11 @@ separate explicit enablement path.
     `accounting_sales_summary`, `accounting_writeoffs_products_summary`,
     `accounting_slice_writeoff_rate`, `accounting_slice_daily_dynamics`,
     `accounting_sales_channels_summary`, and
-    `accounting_sales_discounts_summary`.
+    `accounting_sales_discounts_summary`,
+    `accounting_inventory_stocks_summary`,
+    `accounting_stock_consumptions_by_period_summary`,
+    `ratings_customer_experience_summary`, `ratings_standards_summary`, and
+    `delivery_courier_productivity_summary`.
   - First executable Superset router capabilities: `employee_discount` and
     `kiosk_sales_share`.
   - Unknown or unmapped capabilities return `capability_not_enabled`; no
@@ -243,6 +247,8 @@ is not allowed to read them.
   returns `200`.
 - Public Cloudflare route for `GET /dodo/accounting/sales/discounts-summary`
   returns `200`.
+- MCP `dodo_api_query` maps the compact inventory, stock consumption, ratings,
+  and courier productivity summaries to the existing read-only service layer.
 - Public Cloudflare route for `GET /dodo/orders/clients-statistics` returns
   `200` with `status=blocked_by_scope` and required scope hint `orders` when
   the current token lacks that scope.

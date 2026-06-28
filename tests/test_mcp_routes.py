@@ -472,6 +472,268 @@ def test_mcp_dodo_api_query_runs_sales_discounts_summary(tmp_path, monkeypatch) 
     }
 
 
+def test_mcp_dodo_api_query_runs_inventory_stocks_summary(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch_inventory_stocks_summary(
+        self,  # noqa: ANN001
+        *,
+        parameters,
+        dry_run,
+        low_stock_days_threshold,
+        high_stock_days_threshold,
+        top_limit,
+        take,
+        max_pages,
+    ):
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        captured["low_stock_days_threshold"] = low_stock_days_threshold
+        captured["high_stock_days_threshold"] = high_stock_days_threshold
+        captured["top_limit"] = top_limit
+        captured["take"] = take
+        captured["max_pages"] = max_pages
+        return {"function": "accounting_inventory_stocks_summary", "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch_inventory_stocks_summary", fake_fetch_inventory_stocks_summary)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "accounting_inventory_stocks_summary",
+            "parameters": {
+                "units": "unit-1",
+                "from": "2026-06-21",
+                "to": "2026-06-21",
+                "lowStockDaysThreshold": 2.5,
+                "highStockDaysThreshold": 30,
+                "topLimit": 15,
+                "take": 250,
+                "maxPages": 3,
+            },
+            "dry_run": True,
+        },
+        request_id=14,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "accounting_inventory_stocks_summary"
+    assert captured == {
+        "parameters": {"units": "unit-1", "from": "2026-06-21", "to": "2026-06-21"},
+        "dry_run": True,
+        "low_stock_days_threshold": 2.5,
+        "high_stock_days_threshold": 30.0,
+        "top_limit": 15,
+        "take": 250,
+        "max_pages": 3,
+    }
+
+
+def test_mcp_dodo_api_query_runs_stock_consumptions_summary(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch_stock_consumptions_summary(
+        self,  # noqa: ANN001
+        *,
+        parameters,
+        dry_run,
+        top_limit,
+        take,
+        max_pages,
+    ):
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        captured["top_limit"] = top_limit
+        captured["take"] = take
+        captured["max_pages"] = max_pages
+        return {"function": "accounting_stock_consumptions_by_period_summary", "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch_stock_consumptions_summary", fake_fetch_stock_consumptions_summary)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "accounting_stock_consumptions_by_period_summary",
+            "parameters": {
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-30",
+                "topLimit": 12,
+                "take": 100,
+                "max_pages": 4,
+            },
+            "dry_run": False,
+        },
+        request_id=15,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "accounting_stock_consumptions_by_period_summary"
+    assert captured == {
+        "parameters": {"units": "unit-1", "from": "2026-06-01", "to": "2026-07-01"},
+        "dry_run": False,
+        "top_limit": 12,
+        "take": 100,
+        "max_pages": 4,
+    }
+
+
+def test_mcp_dodo_api_query_runs_customer_experience_ratings_summary(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch_ratings_summary(
+        self,  # noqa: ANN001
+        *,
+        function_name,
+        parameters,
+        dry_run,
+        low_rate_threshold,
+        top_limit,
+        take,
+        max_pages,
+    ):
+        captured["function_name"] = function_name
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        captured["low_rate_threshold"] = low_rate_threshold
+        captured["top_limit"] = top_limit
+        captured["take"] = take
+        captured["max_pages"] = max_pages
+        return {"function": function_name, "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch_ratings_summary", fake_fetch_ratings_summary)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "ratings_customer_experience_summary",
+            "parameters": {
+                "units": ["unit-1", "unit-2"],
+                "lowRateThreshold": 85.5,
+                "topLimit": 7,
+                "take": 200,
+                "maxPages": 2,
+            },
+            "dry_run": True,
+        },
+        request_id=16,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "ratings_customer_experience_summary"
+    assert captured == {
+        "function_name": "ratings_customer_experience_summary",
+        "parameters": {"units": "unit-1,unit-2"},
+        "dry_run": True,
+        "low_rate_threshold": 85.5,
+        "top_limit": 7,
+        "take": 200,
+        "max_pages": 2,
+    }
+
+
+def test_mcp_dodo_api_query_runs_standards_ratings_summary(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch_ratings_summary(
+        self,  # noqa: ANN001
+        *,
+        function_name,
+        parameters,
+        dry_run,
+        low_rate_threshold,
+        top_limit,
+        take,
+        max_pages,
+    ):
+        captured["function_name"] = function_name
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        captured["low_rate_threshold"] = low_rate_threshold
+        captured["top_limit"] = top_limit
+        captured["take"] = take
+        captured["max_pages"] = max_pages
+        return {"function": function_name, "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch_ratings_summary", fake_fetch_ratings_summary)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "ratings_standards_summary",
+            "parameters": {
+                "countryCode": 643,
+                "lowRateThreshold": 82,
+                "topLimit": 10,
+            },
+            "dry_run": False,
+        },
+        request_id=17,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "ratings_standards_summary"
+    assert captured == {
+        "function_name": "ratings_standards_summary",
+        "parameters": {"countryCode": 643},
+        "dry_run": False,
+        "low_rate_threshold": 82.0,
+        "top_limit": 10,
+        "take": None,
+        "max_pages": None,
+    }
+
+
+def test_mcp_dodo_api_query_runs_delivery_courier_productivity_summary(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch_delivery_courier_productivity_summary(
+        self,  # noqa: ANN001
+        *,
+        parameters,
+        dry_run,
+        top_limit,
+    ):
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        captured["top_limit"] = top_limit
+        return {"function": "delivery_courier_productivity_summary", "read_only": True}
+
+    monkeypatch.setattr(
+        DodoDataService,
+        "fetch_delivery_courier_productivity_summary",
+        fake_fetch_delivery_courier_productivity_summary,
+    )
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "delivery_courier_productivity_summary",
+            "parameters": {
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-30",
+                "topLimit": 8,
+            },
+            "dry_run": True,
+        },
+        request_id=18,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "delivery_courier_productivity_summary"
+    assert captured == {
+        "parameters": {"units": "unit-1", "from": "2026-06-01", "to": "2026-07-01"},
+        "dry_run": True,
+        "top_limit": 8,
+    }
+
+
 def test_mcp_superset_query_runs_employee_discount(tmp_path, monkeypatch) -> None:
     captured: dict[str, object] = {}
 

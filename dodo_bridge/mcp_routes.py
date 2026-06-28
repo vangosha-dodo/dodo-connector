@@ -328,6 +328,31 @@ async def _run_dodo_api_query(
                 **_sales_discounts_summary_query(arguments, service.settings)
             )
             tool_name = "dodo_accounting_sales"
+        elif capability == "accounting_inventory_stocks_summary":
+            result = await service.fetch_inventory_stocks_summary(
+                **_inventory_stocks_summary_query(arguments, service.settings)
+            )
+            tool_name = "dodo_accounting_inventory_stocks"
+        elif capability == "accounting_stock_consumptions_by_period_summary":
+            result = await service.fetch_stock_consumptions_summary(
+                **_stock_consumptions_summary_query(arguments, service.settings)
+            )
+            tool_name = "dodo_accounting_stock_consumptions_by_period"
+        elif capability == "ratings_customer_experience_summary":
+            result = await service.fetch_ratings_summary(
+                **_ratings_summary_query(arguments, service.settings, capability)
+            )
+            tool_name = "dodo_controlling_ratings_customer_experience"
+        elif capability == "ratings_standards_summary":
+            result = await service.fetch_ratings_summary(
+                **_ratings_summary_query(arguments, service.settings, capability)
+            )
+            tool_name = "dodo_controlling_ratings_standards"
+        elif capability == "delivery_courier_productivity_summary":
+            result = await service.fetch_delivery_courier_productivity_summary(
+                **_delivery_productivity_summary_query(arguments, service.settings)
+            )
+            tool_name = "dodo_delivery_statistics"
         else:
             return _capability_not_enabled("dodo_api_query", arguments), True
     except (ValueError, HTTPException) as exc:
@@ -521,9 +546,74 @@ def _sales_discounts_summary_query(arguments: dict[str, Any], settings: Settings
     }
 
 
+def _inventory_stocks_summary_query(arguments: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    raw_parameters, parameters = _period_query(arguments, settings, exclusive_to=False)
+    return {
+        "parameters": parameters,
+        "dry_run": _dry_run(arguments, raw_parameters),
+        "low_stock_days_threshold": float(raw_parameters.get("lowStockDaysThreshold", 3.0)),
+        "high_stock_days_threshold": float(raw_parameters.get("highStockDaysThreshold", 21.0)),
+        "top_limit": int(raw_parameters.get("topLimit", 10)),
+        "take": raw_parameters.get("take"),
+        "max_pages": _max_pages(raw_parameters),
+    }
+
+
+def _stock_consumptions_summary_query(arguments: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    raw_parameters, parameters = _period_query(arguments, settings, exclusive_to=True)
+    return {
+        "parameters": parameters,
+        "dry_run": _dry_run(arguments, raw_parameters),
+        "top_limit": int(raw_parameters.get("topLimit", 10)),
+        "take": raw_parameters.get("take"),
+        "max_pages": _max_pages(raw_parameters),
+    }
+
+
+def _ratings_summary_query(
+    arguments: dict[str, Any],
+    settings: Settings,
+    function_name: str,
+) -> dict[str, Any]:
+    raw_parameters = arguments.get("parameters") or {}
+    if not isinstance(raw_parameters, dict):
+        raise ValueError("parameters must be an object")
+
+    parameters: dict[str, Any] = {}
+    units = raw_parameters.get("units")
+    if units:
+        parameters["units"] = _units_or_all_pizzerias(settings, units)
+    country_code = raw_parameters.get("countryCode", raw_parameters.get("country_code"))
+    if country_code is not None:
+        parameters["countryCode"] = int(country_code)
+    if not parameters:
+        parameters["units"] = _units_or_all_pizzerias(settings, None)
+
+    return {
+        "function_name": function_name,
+        "parameters": parameters,
+        "dry_run": _dry_run(arguments, raw_parameters),
+        "low_rate_threshold": float(raw_parameters.get("lowRateThreshold", 80.0)),
+        "top_limit": int(raw_parameters.get("topLimit", 5)),
+        "take": raw_parameters.get("take"),
+        "max_pages": _max_pages(raw_parameters),
+    }
+
+
+def _delivery_productivity_summary_query(arguments: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    raw_parameters, parameters = _period_query(arguments, settings, exclusive_to=True)
+    return {
+        "parameters": parameters,
+        "dry_run": _dry_run(arguments, raw_parameters),
+        "top_limit": int(raw_parameters.get("topLimit", 5)),
+    }
+
+
 def _period_query(
     arguments: dict[str, Any],
     settings: Settings,
+    *,
+    exclusive_to: bool = True,
 ) -> tuple[dict[str, Any], dict[str, str]]:
     raw_parameters = arguments.get("parameters") or {}
     if not isinstance(raw_parameters, dict):
@@ -536,7 +626,7 @@ def _period_query(
     parameters = {
         "units": _units_or_all_pizzerias(settings, raw_parameters.get("units")),
         "from": from_date.isoformat(),
-        "to": (to_date + timedelta(days=1)).isoformat(),
+        "to": (to_date + timedelta(days=1) if exclusive_to else to_date).isoformat(),
     }
     return raw_parameters, parameters
 
