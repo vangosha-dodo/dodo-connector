@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from dodo_bridge.config import Settings
+from dodo_bridge.connectors.superset import SupersetConnector
 from dodo_bridge.dodo_data import DodoDataService
 from dodo_bridge.main import app
 
@@ -183,6 +184,115 @@ def test_mcp_dodo_api_query_runs_allowed_sales_summary(tmp_path, monkeypatch) ->
         "concurrency": 2,
         "cache_mode": "bypass",
     }
+
+
+def test_mcp_superset_query_runs_employee_discount(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        captured["tool_name"] = tool.name
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        return {
+            "result": [
+                {
+                    "rowcount": 1,
+                    "data": [
+                        {
+                            "UnitName": "Тамбов-1",
+                            "ActionSegmentationAndSource": "Сотрудникам",
+                            "Discount": 1000,
+                            "SalesWithoutDiscount": 10000,
+                        }
+                    ],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(SupersetConnector, "invoke", fake_invoke)
+
+    with mcp_client(tmp_path) as client:
+        response = client.post(
+            "/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 7,
+                "method": "tools/call",
+                "params": {
+                    "name": "superset_query",
+                    "arguments": {
+                        "capability": "employee_discount",
+                        "parameters": {
+                            "unit_names": [" Тамбов-1 "],
+                            "period": {"from": "2026-06-01", "to": "2026-06-30"},
+                        },
+                        "dry_run": False,
+                    },
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["isError"] is False
+    payload = result["structuredContent"]
+    assert payload["capability_id"] == "get_employee_discount"
+    assert payload["summary"]["employee_discount_amount"] == 1000
+    assert captured["tool_name"] == "superset_employee_discount_chart"
+    assert captured["dry_run"] is False
+    assert captured["parameters"]["dashboard_id"] == 1410
+    assert captured["parameters"]["chart_id"] == 26708
+
+
+def test_mcp_superset_query_runs_kiosk_sales_share(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_invoke(self, tool, parameters, dry_run):  # noqa: ANN001
+        captured["tool_name"] = tool.name
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        return {
+            "result": [
+                {
+                    "rowcount": 1,
+                    "data": [{"UnitName": "Чита-2", "Share sales via Kiosk": 0.42}],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(SupersetConnector, "invoke", fake_invoke)
+
+    with mcp_client(tmp_path) as client:
+        response = client.post(
+            "/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 8,
+                "method": "tools/call",
+                "params": {
+                    "name": "superset_query",
+                    "arguments": {
+                        "capability": "kiosk_sales_share",
+                        "parameters": {
+                            "unit_names": ["Чита-2"],
+                            "month": "2026-06",
+                        },
+                        "dry_run": True,
+                    },
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["isError"] is False
+    payload = result["structuredContent"]
+    assert payload["capability_id"] == "get_kiosk_sales_share"
+    assert payload["summary"]["average_kiosk_sales_share_pct"] == 42
+    assert captured["tool_name"] == "superset_kiosk_sales_share"
+    assert captured["dry_run"] is True
+    assert captured["parameters"]["dashboard_id"] == 714
+    assert captured["parameters"]["chart_id"] == 9533
 
 
 class mcp_client:

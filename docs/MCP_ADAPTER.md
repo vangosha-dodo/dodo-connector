@@ -36,9 +36,10 @@ The endpoint uses JSON-RPC 2.0 request and response envelopes.
   - Runs an approved read-only Dodo API capability by name.
   - First enabled capability: `accounting_sales_summary`.
 - `superset_query`
-  - Reserved for approved Superset recipes.
-  - Currently returns `capability_not_enabled` unless a capability is mapped in
-    Bridge code.
+  - Runs approved Superset recipes by capability name.
+  - Enabled capabilities:
+    - `employee_discount`
+    - `kiosk_sales_share`
 - `office_manager_query`
   - Reserved for approved Office Manager read-only extractors.
   - Currently returns `capability_not_enabled` unless a capability is mapped in
@@ -95,3 +96,45 @@ The endpoint uses JSON-RPC 2.0 request and response envelopes.
 
 For all configured pizzerias, omit `parameters.units`; Bridge will use the same
 pizzeria catalog as the REST summary endpoints.
+
+## Example: Employee Discount
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "superset_query",
+    "arguments": {
+      "capability": "employee_discount",
+      "parameters": {
+        "unit_names": ["Тамбов-1"],
+        "period": {"from": "2026-06-01", "to": "2026-06-30"}
+      },
+      "dry_run": false
+    }
+  }
+}
+```
+
+## Example: Kiosk Sales Share
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "superset_query",
+    "arguments": {
+      "capability": "kiosk_sales_share",
+      "parameters": {
+        "unit_names": ["Чита-2"],
+        "month": "2026-06"
+      },
+      "dry_run": false
+    }
+  }
+}
+```

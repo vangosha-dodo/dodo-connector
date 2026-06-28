@@ -8,9 +8,29 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import ValidationError
 
+from dodo_bridge.analytics_employee_discount import (
+    EMPLOYEE_DISCOUNT_CHART_ID,
+    EMPLOYEE_DISCOUNT_DASHBOARD_ID,
+    EMPLOYEE_DISCOUNT_METRIC,
+    EMPLOYEE_DISCOUNT_TOOL,
+    EmployeeDiscountRequest,
+    build_employee_discount_payload,
+    normalize_employee_discount_result,
+)
+from dodo_bridge.analytics_kiosk_sales import (
+    KIOSK_SALES_SHARE_CHART_ID,
+    KIOSK_SALES_SHARE_DASHBOARD_ID,
+    KIOSK_SALES_SHARE_METRIC,
+    KIOSK_SALES_SHARE_TOOL,
+    KioskSalesShareRequest,
+    build_kiosk_sales_share_payload,
+    normalize_kiosk_sales_share_result,
+)
 from dodo_bridge.audit import AuditStore
 from dodo_bridge.config import Settings, get_settings
+from dodo_bridge.connectors.superset import SupersetConnector
 from dodo_bridge.dodo_data import DodoDataService, normalize_units, validate_period
+from dodo_bridge.models import ToolInvocationRequest
 from dodo_bridge.pizzerias import load_pizzerias
 from dodo_bridge.policy import PolicyEngine
 from dodo_bridge.registry import ToolRegistry
@@ -148,6 +168,10 @@ async def _handle_tools_call(
         payload, is_error = await _run_dodo_api_query(arguments, service=service, audit=audit, actor=actor)
         return _json_rpc_result(request_id, _tool_result(payload, is_error=is_error))
 
+    if name == "superset_query":
+        payload, is_error = await _run_superset_query(arguments, service=service, audit=audit, actor=actor)
+        return _json_rpc_result(request_id, _tool_result(payload, is_error=is_error))
+
     return _json_rpc_result(request_id, _tool_result(_capability_not_enabled(name, arguments), is_error=True))
 
 
@@ -175,6 +199,22 @@ def _list_capabilities(service: DodoDataService) -> dict[str, Any]:
             for tool in _mcp_tools()
         ],
         "dodo_capabilities": dodo_capabilities,
+        "superset_capabilities": [
+            {
+                "name": "employee_discount",
+                "description": "Employee discount from the approved Superset recipe.",
+                "tool_name": EMPLOYEE_DISCOUNT_TOOL,
+                "enabled": True,
+                "allowed_by_policy": True,
+            },
+            {
+                "name": "kiosk_sales_share",
+                "description": "Kiosk sales share from the approved Superset recipe.",
+                "tool_name": KIOSK_SALES_SHARE_TOOL,
+                "enabled": True,
+                "allowed_by_policy": True,
+            },
+        ],
     }
     payload["message"] = (
         "Bridge MCP adapter is read-only. Use router tools with approved capability names; "
@@ -279,6 +319,113 @@ async def _run_dodo_api_query(
         connector="dodo",
         decision="allow",
         reason="mcp_capability_router",
+        outcome="success",
+        params=arguments,
+        response_chars=len(json.dumps(result, ensure_ascii=False, default=str)),
+    )
+    return result, False
+
+
+async def _run_superset_query(
+    arguments: dict[str, Any],
+    *,
+    service: DodoDataService,
+    audit: AuditStore,
+    actor: str,
+) -> tuple[dict[str, Any], bool]:
+    capability = arguments.get("capability")
+    raw_parameters = arguments.get("parameters") or {}
+    if not isinstance(raw_parameters, dict):
+        return {
+            "status": "invalid_arguments",
+            "read_only": True,
+            "capability": capability,
+            "message": "parameters must be an object",
+        }, True
+    dry_run = bool(arguments.get("dry_run", raw_parameters.get("dry_run", False)))
+
+    try:
+        if capability == "employee_discount":
+            body = EmployeeDiscountRequest.model_validate({**raw_parameters, "dry_run": dry_run})
+            superset_payload = build_employee_discount_payload(body)
+            tool_name = EMPLOYEE_DISCOUNT_TOOL
+            parameters = {
+                "dashboard_id": EMPLOYEE_DISCOUNT_DASHBOARD_ID,
+                "chart_id": EMPLOYEE_DISCOUNT_CHART_ID,
+                "metric": EMPLOYEE_DISCOUNT_METRIC,
+                "body": superset_payload,
+            }
+            normalizer = normalize_employee_discount_result
+        elif capability == "kiosk_sales_share":
+            body = KioskSalesShareRequest.model_validate({**raw_parameters, "dry_run": dry_run})
+            superset_payload = build_kiosk_sales_share_payload(body)
+            tool_name = KIOSK_SALES_SHARE_TOOL
+            parameters = {
+                "dashboard_id": KIOSK_SALES_SHARE_DASHBOARD_ID,
+                "chart_id": KIOSK_SALES_SHARE_CHART_ID,
+                "metric": KIOSK_SALES_SHARE_METRIC,
+                "body": superset_payload,
+            }
+            normalizer = normalize_kiosk_sales_share_result
+        else:
+            return _capability_not_enabled("superset_query", arguments), True
+    except ValidationError as exc:
+        return {
+            "status": "invalid_arguments",
+            "read_only": True,
+            "capability": capability,
+            "errors": exc.errors(),
+        }, True
+
+    tool = service.registry.get(tool_name)
+    decision = service.policy.evaluate(
+        tool,
+        ToolInvocationRequest(
+            parameters=parameters,
+            intent=f"mcp:superset_query:{capability}",
+            dry_run=dry_run,
+        ),
+        len(json.dumps(parameters, ensure_ascii=False, default=str)),
+    )
+    if decision.outcome != "allow":
+        audit_id = audit.record_event(
+            actor=actor,
+            intent=f"mcp:superset_query:{capability}",
+            tool_name=tool_name,
+            connector="superset",
+            decision=decision.outcome,
+            reason=decision.reason,
+            outcome="blocked",
+            params=arguments,
+        )
+        return {
+            "status": "blocked_by_policy",
+            "read_only": True,
+            "capability": capability,
+            "audit_id": audit_id,
+            "decision": decision.outcome,
+            "reason": decision.reason,
+        }, True
+
+    raw = await SupersetConnector(service.settings).invoke(tool, parameters, dry_run)
+    if isinstance(raw, dict) and raw.get("dry_run"):
+        result = {
+            "status": "dry_run",
+            "capability_id": capability,
+            "source": "Superset",
+            "request": raw.get("request"),
+            "warnings": ["Superset was not called because dry_run=true."],
+            "read_only": True,
+        }
+    else:
+        result = normalizer(raw, body)
+    audit.record_event(
+        actor=actor,
+        intent=f"mcp:superset_query:{capability}",
+        tool_name=tool_name,
+        connector="superset",
+        decision=decision.outcome,
+        reason=decision.reason,
         outcome="success",
         params=arguments,
         response_chars=len(json.dumps(result, ensure_ascii=False, default=str)),

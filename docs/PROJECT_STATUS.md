@@ -49,6 +49,8 @@ separate explicit enablement path.
   - Exposes router tools only: `list_capabilities`, `dodo_api_query`,
     `superset_query`, `office_manager_query`, and `report_missing_capability`.
   - First executable Dodo router capability: `accounting_sales_summary`.
+  - First executable Superset router capabilities: `employee_discount` and
+    `kiosk_sales_share`.
   - Unknown or unmapped capabilities return `capability_not_enabled`; no
     arbitrary URL, SQL, JavaScript, browser command, write, or admin execution is
     allowed.
