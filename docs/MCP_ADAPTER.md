@@ -34,7 +34,13 @@ The endpoint uses JSON-RPC 2.0 request and response envelopes.
   - Lists read-only Bridge MCP router tools and Dodo capabilities.
 - `dodo_api_query`
   - Runs an approved read-only Dodo API capability by name.
-  - First enabled capability: `accounting_sales_summary`.
+  - Enabled capabilities:
+    - `accounting_sales_summary`
+    - `accounting_writeoffs_products_summary`
+    - `accounting_slice_writeoff_rate`
+    - `accounting_slice_daily_dynamics`
+    - `accounting_sales_channels_summary`
+    - `accounting_sales_discounts_summary`
 - `superset_query`
   - Runs approved Superset recipes by capability name.
   - Enabled capabilities:
@@ -96,6 +102,30 @@ The endpoint uses JSON-RPC 2.0 request and response envelopes.
 
 For all configured pizzerias, omit `parameters.units`; Bridge will use the same
 pizzeria catalog as the REST summary endpoints.
+
+## Example: Slice Daily Dynamics
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "method": "tools/call",
+  "params": {
+    "name": "dodo_api_query",
+    "arguments": {
+      "capability": "accounting_slice_daily_dynamics",
+      "parameters": {
+        "units": "unit-id-1",
+        "from": "2026-06-01",
+        "to": "2026-06-30",
+        "productNamePrefix": "Кус",
+        "includeProducts": false
+      },
+      "dry_run": false
+    }
+  }
+}
+```
 
 ## Example: Employee Discount
 

@@ -48,7 +48,11 @@ separate explicit enablement path.
   - Supports JSON-RPC `initialize`, `tools/list`, and `tools/call`.
   - Exposes router tools only: `list_capabilities`, `dodo_api_query`,
     `superset_query`, `office_manager_query`, and `report_missing_capability`.
-  - First executable Dodo router capability: `accounting_sales_summary`.
+  - Executable Dodo router capabilities:
+    `accounting_sales_summary`, `accounting_writeoffs_products_summary`,
+    `accounting_slice_writeoff_rate`, `accounting_slice_daily_dynamics`,
+    `accounting_sales_channels_summary`, and
+    `accounting_sales_discounts_summary`.
   - First executable Superset router capabilities: `employee_discount` and
     `kiosk_sales_share`.
   - Unknown or unmapped capabilities return `capability_not_enabled`; no

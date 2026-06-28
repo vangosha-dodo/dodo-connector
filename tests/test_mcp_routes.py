@@ -186,6 +186,292 @@ def test_mcp_dodo_api_query_runs_allowed_sales_summary(tmp_path, monkeypatch) ->
     }
 
 
+def test_mcp_dodo_api_query_runs_writeoff_summary(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch_writeoff_products_summary(
+        self,  # noqa: ANN001
+        *,
+        parameters,
+        dry_run,
+        product_name_prefix,
+        include_products,
+        include_reasons,
+        take,
+        max_pages,
+    ):
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        captured["product_name_prefix"] = product_name_prefix
+        captured["include_products"] = include_products
+        captured["include_reasons"] = include_reasons
+        captured["take"] = take
+        captured["max_pages"] = max_pages
+        return {"function": "accounting_writeoffs_products_summary", "read_only": True}
+
+    monkeypatch.setattr(
+        DodoDataService,
+        "fetch_writeoff_products_summary",
+        fake_fetch_writeoff_products_summary,
+    )
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "accounting_writeoffs_products_summary",
+            "parameters": {
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-01",
+                "productNamePrefix": "Кус",
+                "includeProducts": True,
+                "includeReasons": True,
+                "take": 100,
+                "max_pages": 3,
+            },
+            "dry_run": True,
+        },
+        request_id=9,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "accounting_writeoffs_products_summary"
+    assert captured == {
+        "parameters": {"units": "unit-1", "from": "2026-06-01", "to": "2026-06-02"},
+        "dry_run": True,
+        "product_name_prefix": "Кус",
+        "include_products": True,
+        "include_reasons": True,
+        "take": 100,
+        "max_pages": 3,
+    }
+
+
+def test_mcp_dodo_api_query_runs_slice_writeoff_rate(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch_slice_writeoff_rate(
+        self,  # noqa: ANN001
+        *,
+        sales_parameters,
+        writeoff_parameters,
+        dry_run,
+        product_name_prefix,
+        include_products,
+        take,
+        max_pages,
+    ):
+        captured["sales_parameters"] = sales_parameters
+        captured["writeoff_parameters"] = writeoff_parameters
+        captured["dry_run"] = dry_run
+        captured["product_name_prefix"] = product_name_prefix
+        captured["include_products"] = include_products
+        captured["take"] = take
+        captured["max_pages"] = max_pages
+        return {"function": "accounting_slice_writeoff_rate", "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch_slice_writeoff_rate", fake_fetch_slice_writeoff_rate)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "accounting_slice_writeoff_rate",
+            "parameters": {
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-30",
+                "productNamePrefix": "Кус",
+                "includeProducts": False,
+                "take": 250,
+                "max_pages": 5,
+            },
+            "dry_run": False,
+        },
+        request_id=10,
+    )
+
+    expected_params = {"units": "unit-1", "from": "2026-06-01", "to": "2026-07-01"}
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "accounting_slice_writeoff_rate"
+    assert captured == {
+        "sales_parameters": expected_params,
+        "writeoff_parameters": expected_params,
+        "dry_run": False,
+        "product_name_prefix": "Кус",
+        "include_products": False,
+        "take": 250,
+        "max_pages": 5,
+    }
+
+
+def test_mcp_dodo_api_query_runs_slice_daily_dynamics(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch_slice_daily_dynamics(
+        self,  # noqa: ANN001
+        *,
+        sales_parameters,
+        writeoff_parameters,
+        dry_run,
+        product_name_prefix,
+        include_products,
+        take,
+        max_pages,
+    ):
+        captured["sales_parameters"] = sales_parameters
+        captured["writeoff_parameters"] = writeoff_parameters
+        captured["dry_run"] = dry_run
+        captured["product_name_prefix"] = product_name_prefix
+        captured["include_products"] = include_products
+        captured["take"] = take
+        captured["max_pages"] = max_pages
+        return {"function": "accounting_slice_daily_dynamics", "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch_slice_daily_dynamics", fake_fetch_slice_daily_dynamics)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "accounting_slice_daily_dynamics",
+            "parameters": {
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-03",
+                "productNamePrefix": "Кус",
+                "includeProducts": True,
+                "take": 300,
+                "max_pages": 4,
+            },
+            "dry_run": True,
+        },
+        request_id=11,
+    )
+
+    expected_params = {"units": "unit-1", "from": "2026-06-01", "to": "2026-06-04"}
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "accounting_slice_daily_dynamics"
+    assert captured == {
+        "sales_parameters": expected_params,
+        "writeoff_parameters": expected_params,
+        "dry_run": True,
+        "product_name_prefix": "Кус",
+        "include_products": True,
+        "take": 300,
+        "max_pages": 4,
+    }
+
+
+def test_mcp_dodo_api_query_runs_sales_channels_summary(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch_sales_channels_summary(
+        self,  # noqa: ANN001
+        *,
+        parameters,
+        dry_run,
+        take,
+        max_pages_per_unit,
+        concurrency,
+    ):
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        captured["take"] = take
+        captured["max_pages_per_unit"] = max_pages_per_unit
+        captured["concurrency"] = concurrency
+        return {"function": "accounting_sales_channels_summary", "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch_sales_channels_summary", fake_fetch_sales_channels_summary)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "accounting_sales_channels_summary",
+            "parameters": {
+                "units": "unit-1",
+                "from": "2026-05-01",
+                "to": "2026-05-31",
+                "take": 1000,
+                "maxPagesPerUnit": 12,
+                "concurrency": 8,
+            },
+            "dry_run": True,
+        },
+        request_id=12,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "accounting_sales_channels_summary"
+    assert captured == {
+        "parameters": {"units": "unit-1", "from": "2026-05-01", "to": "2026-06-01"},
+        "dry_run": True,
+        "take": 1000,
+        "max_pages_per_unit": 12,
+        "concurrency": 8,
+    }
+
+
+def test_mcp_dodo_api_query_runs_sales_discounts_summary(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch_sales_discounts_summary(
+        self,  # noqa: ANN001
+        *,
+        parameters,
+        dry_run,
+        include_actions,
+        top_actions_limit,
+        take,
+        max_pages_per_unit,
+        concurrency,
+    ):
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        captured["include_actions"] = include_actions
+        captured["top_actions_limit"] = top_actions_limit
+        captured["take"] = take
+        captured["max_pages_per_unit"] = max_pages_per_unit
+        captured["concurrency"] = concurrency
+        return {"function": "accounting_sales_discounts_summary", "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch_sales_discounts_summary", fake_fetch_sales_discounts_summary)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "accounting_sales_discounts_summary",
+            "parameters": {
+                "units": "unit-1",
+                "from": "2026-05-01",
+                "to": "2026-05-31",
+                "includeActions": True,
+                "topActionsLimit": 20,
+                "take": 1000,
+                "maxPagesPerUnit": 12,
+                "concurrency": 8,
+            },
+            "dry_run": False,
+        },
+        request_id=13,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "accounting_sales_discounts_summary"
+    assert captured == {
+        "parameters": {"units": "unit-1", "from": "2026-05-01", "to": "2026-06-01"},
+        "dry_run": False,
+        "include_actions": True,
+        "top_actions_limit": 20,
+        "take": 1000,
+        "max_pages_per_unit": 12,
+        "concurrency": 8,
+    }
+
+
 def test_mcp_superset_query_runs_employee_discount(tmp_path, monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -293,6 +579,28 @@ def test_mcp_superset_query_runs_kiosk_sales_share(tmp_path, monkeypatch) -> Non
     assert captured["dry_run"] is True
     assert captured["parameters"]["dashboard_id"] == 714
     assert captured["parameters"]["chart_id"] == 9533
+
+
+def call_mcp_tool(
+    tmp_path: Path,
+    name: str,
+    arguments: dict[str, object],
+    *,
+    request_id: int,
+) -> dict[str, object]:
+    with mcp_client(tmp_path) as client:
+        response = client.post(
+            "/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": arguments},
+            },
+        )
+
+    assert response.status_code == 200
+    return response.json()["result"]
 
 
 class mcp_client:

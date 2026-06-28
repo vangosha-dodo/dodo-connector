@@ -298,12 +298,38 @@ async def _run_dodo_api_query(
     actor: str,
 ) -> tuple[dict[str, Any], bool]:
     capability = arguments.get("capability")
-    if capability != "accounting_sales_summary":
-        return _capability_not_enabled("dodo_api_query", arguments), True
 
     try:
-        query = _sales_summary_query(arguments, service.settings)
-        result = await service.fetch_sales_summary(**query)
+        if capability == "accounting_sales_summary":
+            result = await service.fetch_sales_summary(**_sales_summary_query(arguments, service.settings))
+            tool_name = "dodo_accounting_sales"
+        elif capability == "accounting_writeoffs_products_summary":
+            result = await service.fetch_writeoff_products_summary(
+                **_writeoff_summary_query(arguments, service.settings)
+            )
+            tool_name = "dodo_accounting_writeoffs_products"
+        elif capability == "accounting_slice_writeoff_rate":
+            result = await service.fetch_slice_writeoff_rate(
+                **_slice_summary_query(arguments, service.settings)
+            )
+            tool_name = "dodo_accounting_writeoffs_products+dodo_accounting_sales"
+        elif capability == "accounting_slice_daily_dynamics":
+            result = await service.fetch_slice_daily_dynamics(
+                **_slice_summary_query(arguments, service.settings)
+            )
+            tool_name = "dodo_accounting_writeoffs_products+dodo_accounting_sales"
+        elif capability == "accounting_sales_channels_summary":
+            result = await service.fetch_sales_channels_summary(
+                **_sales_channels_summary_query(arguments, service.settings)
+            )
+            tool_name = "dodo_accounting_sales"
+        elif capability == "accounting_sales_discounts_summary":
+            result = await service.fetch_sales_discounts_summary(
+                **_sales_discounts_summary_query(arguments, service.settings)
+            )
+            tool_name = "dodo_accounting_sales"
+        else:
+            return _capability_not_enabled("dodo_api_query", arguments), True
     except (ValueError, HTTPException) as exc:
         return {
             "status": "invalid_arguments",
@@ -315,7 +341,7 @@ async def _run_dodo_api_query(
     audit.record_event(
         actor=actor,
         intent=f"mcp:dodo_api_query:{capability}",
-        tool_name="dodo_accounting_sales",
+        tool_name=tool_name,
         connector="dodo",
         decision="allow",
         reason="mcp_capability_router",
@@ -434,6 +460,71 @@ async def _run_superset_query(
 
 
 def _sales_summary_query(arguments: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    raw_parameters, parameters = _period_query(arguments, settings)
+    return {
+        "parameters": parameters,
+        "dry_run": _dry_run(arguments, raw_parameters),
+        "take": raw_parameters.get("take"),
+        "max_pages_per_unit": raw_parameters.get("maxPagesPerUnit"),
+        "concurrency": raw_parameters.get("concurrency"),
+        "cache_mode": str(raw_parameters.get("cacheMode", "auto")),
+    }
+
+
+def _writeoff_summary_query(arguments: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    raw_parameters, parameters = _period_query(arguments, settings)
+    return {
+        "parameters": parameters,
+        "dry_run": _dry_run(arguments, raw_parameters),
+        "product_name_prefix": str(raw_parameters.get("productNamePrefix", "")),
+        "include_products": bool(raw_parameters.get("includeProducts", False)),
+        "include_reasons": bool(raw_parameters.get("includeReasons", False)),
+        "take": raw_parameters.get("take"),
+        "max_pages": _max_pages(raw_parameters),
+    }
+
+
+def _slice_summary_query(arguments: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    raw_parameters, parameters = _period_query(arguments, settings)
+    return {
+        "sales_parameters": parameters,
+        "writeoff_parameters": dict(parameters),
+        "dry_run": _dry_run(arguments, raw_parameters),
+        "product_name_prefix": str(raw_parameters.get("productNamePrefix", "Кус")),
+        "include_products": bool(raw_parameters.get("includeProducts", False)),
+        "take": raw_parameters.get("take"),
+        "max_pages": _max_pages(raw_parameters),
+    }
+
+
+def _sales_channels_summary_query(arguments: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    raw_parameters, parameters = _period_query(arguments, settings)
+    return {
+        "parameters": parameters,
+        "dry_run": _dry_run(arguments, raw_parameters),
+        "take": raw_parameters.get("take"),
+        "max_pages_per_unit": raw_parameters.get("maxPagesPerUnit"),
+        "concurrency": raw_parameters.get("concurrency"),
+    }
+
+
+def _sales_discounts_summary_query(arguments: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    raw_parameters, parameters = _period_query(arguments, settings)
+    return {
+        "parameters": parameters,
+        "dry_run": _dry_run(arguments, raw_parameters),
+        "include_actions": bool(raw_parameters.get("includeActions", False)),
+        "top_actions_limit": int(raw_parameters.get("topActionsLimit", 10)),
+        "take": raw_parameters.get("take"),
+        "max_pages_per_unit": raw_parameters.get("maxPagesPerUnit"),
+        "concurrency": raw_parameters.get("concurrency"),
+    }
+
+
+def _period_query(
+    arguments: dict[str, Any],
+    settings: Settings,
+) -> tuple[dict[str, Any], dict[str, str]]:
     raw_parameters = arguments.get("parameters") or {}
     if not isinstance(raw_parameters, dict):
         raise ValueError("parameters must be an object")
@@ -447,14 +538,15 @@ def _sales_summary_query(arguments: dict[str, Any], settings: Settings) -> dict[
         "from": from_date.isoformat(),
         "to": (to_date + timedelta(days=1)).isoformat(),
     }
-    return {
-        "parameters": parameters,
-        "dry_run": bool(arguments.get("dry_run", raw_parameters.get("dry_run", False))),
-        "take": raw_parameters.get("take"),
-        "max_pages_per_unit": raw_parameters.get("maxPagesPerUnit"),
-        "concurrency": raw_parameters.get("concurrency"),
-        "cache_mode": str(raw_parameters.get("cacheMode", "auto")),
-    }
+    return raw_parameters, parameters
+
+
+def _dry_run(arguments: dict[str, Any], raw_parameters: dict[str, Any]) -> bool:
+    return bool(arguments.get("dry_run", raw_parameters.get("dry_run", False)))
+
+
+def _max_pages(raw_parameters: dict[str, Any]) -> Any:
+    return raw_parameters.get("max_pages", raw_parameters.get("maxPages"))
 
 
 def _required_date(parameters: dict[str, Any], key: str) -> date:
