@@ -19,6 +19,21 @@ Authorization: Bearer <bridge-api-key>
 If local settings have no API keys configured, the endpoint is open in the same
 way as the existing test/dev Bridge routes.
 
+## Diagnostic Endpoint
+
+```text
+GET /mcp/capabilities
+```
+
+Returns the same executable router capabilities as the MCP `list_capabilities`
+tool, but without a JSON-RPC envelope. This is for operator diagnostics and is
+not exported to the ChatGPT OpenAPI Action schema, so it does not consume an
+OpenAPI operation slot.
+
+For the production Cloudflare tunnel, the edge proxy allowlist must include both
+`/mcp` and `/mcp/capabilities`; other `/mcp/*` paths should stay blocked unless
+they are explicitly added.
+
 ## Supported MCP Methods
 
 - `initialize`

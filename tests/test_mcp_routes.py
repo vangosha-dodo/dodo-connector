@@ -89,6 +89,26 @@ def test_mcp_tools_call_list_capabilities_returns_read_only_capabilities(tmp_pat
     assert "courier_payroll_daily_export" in office_manager_names
 
 
+def test_mcp_capabilities_get_returns_router_capabilities(tmp_path) -> None:
+    with mcp_client(tmp_path) as client:
+        response = client.get("/mcp/capabilities")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["read_only"] is True
+    assert payload["diagnostic"] == {
+        "endpoint": "/mcp",
+        "jsonrpc_method": "tools/call",
+        "tool_name": "list_capabilities",
+        "chatgpt_openapi_exposed": False,
+    }
+    capability_names = {item["name"] for item in payload["dodo_capabilities"]}
+    assert "accounting_sales_summary" in capability_names
+    assert "production_productivity" in capability_names
+    assert "courier_orders" not in capability_names
+    assert payload["office_manager_capabilities"][0]["name"] == "courier_payroll_daily_export"
+
+
 def test_mcp_tools_call_rejects_unknown_tool(tmp_path) -> None:
     with mcp_client(tmp_path) as client:
         response = client.post(

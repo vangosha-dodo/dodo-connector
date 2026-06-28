@@ -134,6 +134,24 @@ async def mcp_endpoint(
     return _json_rpc_error(request_id, -32601, f"Method not found: {method}")
 
 
+@router.get("/mcp/capabilities", include_in_schema=False)
+def mcp_capabilities_endpoint(
+    service: DodoDataService = Depends(service_dep),
+    actor: str = Depends(actor_dep),
+) -> dict[str, Any]:
+    del actor
+    payload = _list_capabilities(service)
+    return {
+        **payload,
+        "diagnostic": {
+            "endpoint": "/mcp",
+            "jsonrpc_method": "tools/call",
+            "tool_name": "list_capabilities",
+            "chatgpt_openapi_exposed": False,
+        },
+    }
+
+
 def _initialize_result(params: dict[str, Any]) -> dict[str, Any]:
     requested_version = params.get("protocolVersion")
     protocol_version = requested_version if isinstance(requested_version, str) else MCP_PROTOCOL_VERSION

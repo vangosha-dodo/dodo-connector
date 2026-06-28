@@ -46,6 +46,8 @@ separate explicit enablement path.
 - Experimental MCP adapter:
   - `POST /mcp`
   - Supports JSON-RPC `initialize`, `tools/list`, and `tools/call`.
+  - Diagnostic `GET /mcp/capabilities` returns executable router capabilities
+    without JSON-RPC and is intentionally excluded from ChatGPT OpenAPI.
   - Exposes router tools only: `list_capabilities`, `dodo_api_query`,
     `superset_query`, `office_manager_query`, and `report_missing_capability`.
   - `list_capabilities` reports only capabilities that the MCP router can
