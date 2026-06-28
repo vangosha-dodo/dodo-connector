@@ -51,9 +51,9 @@ separate explicit enablement path.
   - `list_capabilities` reports only capabilities that the MCP router can
     execute, not every internal Dodo function.
   - Executable Dodo router capabilities:
-    `accounting_sales_summary`, `accounting_writeoffs_products_summary`,
-    `accounting_slice_writeoff_rate`, `accounting_slice_daily_dynamics`,
-    `accounting_sales_channels_summary`, and
+    `accounting_sales_summary`, `accounting_sales_comparison`,
+    `accounting_writeoffs_products_summary`, `accounting_slice_writeoff_rate`,
+    `accounting_slice_daily_dynamics`, `accounting_sales_channels_summary`, and
     `accounting_sales_discounts_summary`,
     `accounting_inventory_stocks_summary`,
     `accounting_stock_consumptions_by_period_summary`,

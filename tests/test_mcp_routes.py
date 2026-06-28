@@ -74,10 +74,10 @@ def test_mcp_tools_call_list_capabilities_returns_read_only_capabilities(tmp_pat
         item["name"] for item in result["structuredContent"]["dodo_capabilities"]
     }
     assert "accounting_sales_summary" in capability_names
+    assert "accounting_sales_comparison" in capability_names
     assert "accounting_inventory_stocks_summary" in capability_names
     assert "delivery_courier_productivity_summary" in capability_names
     assert "courier_orders" not in capability_names
-    assert "accounting_sales_comparison" not in capability_names
     office_manager_names = {
         item["name"] for item in result["structuredContent"]["office_manager_capabilities"]
     }
@@ -191,6 +191,65 @@ def test_mcp_dodo_api_query_runs_allowed_sales_summary(tmp_path, monkeypatch) ->
         "max_pages_per_unit": 7,
         "concurrency": 2,
         "cache_mode": "bypass",
+    }
+
+
+def test_mcp_dodo_api_query_runs_sales_comparison(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch_sales_comparison(
+        self,  # noqa: ANN001
+        *,
+        current_parameters,
+        baseline_parameters,
+        dry_run,
+        take,
+        max_pages_per_unit,
+        concurrency,
+        cache_mode,
+    ):
+        captured["current_parameters"] = current_parameters
+        captured["baseline_parameters"] = baseline_parameters
+        captured["dry_run"] = dry_run
+        captured["take"] = take
+        captured["max_pages_per_unit"] = max_pages_per_unit
+        captured["concurrency"] = concurrency
+        captured["cache_mode"] = cache_mode
+        return {"function": "accounting_sales_comparison", "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch_sales_comparison", fake_fetch_sales_comparison)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "accounting_sales_comparison",
+            "parameters": {
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-30",
+                "compareFrom": "2026-05-01",
+                "compareTo": "2026-05-31",
+                "take": 500,
+                "maxPagesPerUnit": 6,
+                "concurrency": 3,
+                "cacheMode": "auto",
+            },
+            "dry_run": True,
+        },
+        request_id=20,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "accounting_sales_comparison"
+    assert captured == {
+        "current_parameters": {"units": "unit-1", "from": "2026-06-01", "to": "2026-07-01"},
+        "baseline_parameters": {"units": "unit-1", "from": "2026-05-01", "to": "2026-06-01"},
+        "dry_run": True,
+        "take": 500,
+        "max_pages_per_unit": 6,
+        "concurrency": 3,
+        "cache_mode": "auto",
     }
 
 

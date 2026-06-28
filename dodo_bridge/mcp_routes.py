@@ -46,6 +46,7 @@ MCP_PROTOCOL_VERSION = "2025-11-25"
 SERVER_INFO = {"name": "dodo-chatgpt-bridge", "version": "0.1.0"}
 DODO_API_QUERY_CAPABILITIES = {
     "accounting_sales_summary",
+    "accounting_sales_comparison",
     "accounting_writeoffs_products_summary",
     "accounting_slice_writeoff_rate",
     "accounting_slice_daily_dynamics",
@@ -348,6 +349,11 @@ async def _run_dodo_api_query(
         if capability == "accounting_sales_summary":
             result = await service.fetch_sales_summary(**_sales_summary_query(arguments, service.settings))
             tool_name = "dodo_accounting_sales"
+        elif capability == "accounting_sales_comparison":
+            result = await service.fetch_sales_comparison(
+                **_sales_comparison_query(arguments, service.settings)
+            )
+            tool_name = "dodo_accounting_sales"
         elif capability == "accounting_writeoffs_products_summary":
             result = await service.fetch_writeoff_products_summary(
                 **_writeoff_summary_query(arguments, service.settings)
@@ -586,6 +592,38 @@ def _sales_summary_query(arguments: dict[str, Any], settings: Settings) -> dict[
     raw_parameters, parameters = _period_query(arguments, settings)
     return {
         "parameters": parameters,
+        "dry_run": _dry_run(arguments, raw_parameters),
+        "take": raw_parameters.get("take"),
+        "max_pages_per_unit": raw_parameters.get("maxPagesPerUnit"),
+        "concurrency": raw_parameters.get("concurrency"),
+        "cache_mode": str(raw_parameters.get("cacheMode", "auto")),
+    }
+
+
+def _sales_comparison_query(arguments: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    raw_parameters = arguments.get("parameters") or {}
+    if not isinstance(raw_parameters, dict):
+        raise ValueError("parameters must be an object")
+
+    units = _units_or_all_pizzerias(settings, raw_parameters.get("units"))
+    from_date = _required_date(raw_parameters, "from")
+    to_date = _required_date(raw_parameters, "to")
+    compare_from_date = _required_date(raw_parameters, "compareFrom")
+    compare_to_date = _required_date(raw_parameters, "compareTo")
+    validate_period(from_date, to_date, settings)
+    validate_period(compare_from_date, compare_to_date, settings)
+
+    return {
+        "current_parameters": {
+            "units": units,
+            "from": from_date.isoformat(),
+            "to": (to_date + timedelta(days=1)).isoformat(),
+        },
+        "baseline_parameters": {
+            "units": units,
+            "from": compare_from_date.isoformat(),
+            "to": (compare_to_date + timedelta(days=1)).isoformat(),
+        },
         "dry_run": _dry_run(arguments, raw_parameters),
         "take": raw_parameters.get("take"),
         "max_pages_per_unit": raw_parameters.get("maxPagesPerUnit"),

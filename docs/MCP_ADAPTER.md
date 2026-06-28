@@ -36,6 +36,7 @@ The endpoint uses JSON-RPC 2.0 request and response envelopes.
   - Runs an approved read-only Dodo API capability by name.
   - Enabled capabilities:
     - `accounting_sales_summary`
+    - `accounting_sales_comparison`
     - `accounting_writeoffs_products_summary`
     - `accounting_slice_writeoff_rate`
     - `accounting_slice_daily_dynamics`
