@@ -74,6 +74,10 @@ def test_mcp_tools_call_list_capabilities_returns_read_only_capabilities(tmp_pat
         item["name"] for item in result["structuredContent"]["dodo_capabilities"]
     }
     assert "accounting_sales_summary" in capability_names
+    office_manager_names = {
+        item["name"] for item in result["structuredContent"]["office_manager_capabilities"]
+    }
+    assert "courier_payroll_daily_export" in office_manager_names
 
 
 def test_mcp_tools_call_rejects_unknown_tool(tmp_path) -> None:
@@ -843,14 +847,59 @@ def test_mcp_superset_query_runs_kiosk_sales_share(tmp_path, monkeypatch) -> Non
     assert captured["parameters"]["chart_id"] == 9533
 
 
+def test_mcp_office_manager_query_runs_courier_payroll_daily_export(tmp_path) -> None:
+    pizzerias_path = write_pizzerias(tmp_path)
+    result = call_mcp_tool(
+        tmp_path,
+        "office_manager_query",
+        {
+            "capability": "courier_payroll_daily_export",
+            "parameters": {
+                "report_date": "2026-06-16",
+                "pizzerias": ["Тамбов-1"],
+                "extract_source": False,
+                "include_source_rows": False,
+            },
+        },
+        request_id=19,
+        dodo_pizzerias_path=pizzerias_path,
+    )
+
+    assert result["isError"] is False
+    payload = result["structuredContent"]
+    assert payload["job_name"] == "courier_payroll_daily_export"
+    assert payload["dry_run"] is True
+    assert payload["dodo_is_changed"] is False
+    assert payload["google_sheets_changed"] is False
+    assert payload["source"]["path"] == "Отчеты -> Заработная плата"
+    assert payload["source"]["filters"] == {"date": "2026-06-16", "staff_type": "Курьер"}
+    assert payload["source"]["helper_called"] is False
+    assert payload["extraction_requests"] == [
+        {
+            "unit_id": "unit-tambov-1",
+            "pizzeria": "Тамбов-1",
+            "date": "2026-06-16",
+            "staff_type": "Курьер",
+            "read_only": True,
+        }
+    ]
+    assert payload["planned_writes"][0]["enabled"] is False
+    assert payload["safety"] == {
+        "chatgpt_action_exposed": False,
+        "dodo_is_write_allowed": False,
+        "google_sheets_write_allowed": False,
+    }
+
+
 def call_mcp_tool(
     tmp_path: Path,
     name: str,
     arguments: dict[str, object],
     *,
     request_id: int,
+    dodo_pizzerias_path: Path | None = None,
 ) -> dict[str, object]:
-    with mcp_client(tmp_path) as client:
+    with mcp_client(tmp_path, dodo_pizzerias_path=dodo_pizzerias_path) as client:
         response = client.post(
             "/mcp",
             json={
@@ -866,14 +915,14 @@ def call_mcp_tool(
 
 
 class mcp_client:
-    def __init__(self, tmp_path: Path):
+    def __init__(self, tmp_path: Path, *, dodo_pizzerias_path: Path | None = None):
         self.settings = Settings(
             api_keys=[],
             tool_registry_path=Path("configs/tools.example.yaml"),
             policy_path=Path("configs/policy.example.yaml"),
             audit_db_path=tmp_path / "audit.sqlite3",
             dodo_access_token=None,
-            dodo_pizzerias_path=None,
+            dodo_pizzerias_path=dodo_pizzerias_path,
         )
         self.client: TestClient | None = None
 
@@ -886,3 +935,27 @@ class mcp_client:
 
     def __exit__(self, exc_type, exc, traceback) -> None:  # noqa: ANN001
         app.dependency_overrides.clear()
+
+
+def write_pizzerias(tmp_path: Path) -> Path:
+    path = tmp_path / "pizzerias.json"
+    path.write_text(
+        """[
+  {
+    "id": "unit-tambov-1",
+    "name": "Тамбов-1",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  },
+  {
+    "id": "unit-arkh-1",
+    "name": "Архангельск-1",
+    "countryCode": 643,
+    "businessId": "dodopizza",
+    "unitType": 1
+  }
+]""",
+        encoding="utf-8",
+    )
+    return path

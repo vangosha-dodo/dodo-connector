@@ -59,6 +59,8 @@ separate explicit enablement path.
     `delivery_courier_productivity_summary`.
   - First executable Superset router capabilities: `employee_discount` and
     `kiosk_sales_share`.
+  - First executable Office Manager router capability:
+    `courier_payroll_daily_export` in dry-run/read-only mode only.
   - Unknown or unmapped capabilities return `capability_not_enabled`; no
     arbitrary URL, SQL, JavaScript, browser command, write, or admin execution is
     allowed.
@@ -249,6 +251,9 @@ is not allowed to read them.
   returns `200`.
 - MCP `dodo_api_query` maps the compact inventory, stock consumption, ratings,
   and courier productivity summaries to the existing read-only service layer.
+- MCP `office_manager_query` maps `courier_payroll_daily_export` to the internal
+  dry-run planner. It can plan Office Manager extraction and planned sheet rows,
+  but write flags remain disabled.
 - Public Cloudflare route for `GET /dodo/orders/clients-statistics` returns
   `200` with `status=blocked_by_scope` and required scope hint `orders` when
   the current token lacks that scope.

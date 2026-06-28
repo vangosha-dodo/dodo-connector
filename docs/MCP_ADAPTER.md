@@ -52,9 +52,12 @@ The endpoint uses JSON-RPC 2.0 request and response envelopes.
     - `employee_discount`
     - `kiosk_sales_share`
 - `office_manager_query`
-  - Reserved for approved Office Manager read-only extractors.
-  - Currently returns `capability_not_enabled` unless a capability is mapped in
-    Bridge code.
+  - Runs approved Office Manager read-only extractors by capability name.
+  - Enabled capabilities:
+    - `courier_payroll_daily_export`
+  - The current capability runs only the internal dry-run planner. It can read
+    Office Manager when `extract_source=true`, but it never writes to Dodo IS or
+    Google Sheets.
 - `report_missing_capability`
   - Records an internal Bridge backlog entry for a missing read-only capability.
   - It does not change Dodo IS, Superset, or Office Manager.
@@ -169,6 +172,27 @@ pizzeria catalog as the REST summary endpoints.
         "month": "2026-06"
       },
       "dry_run": false
+    }
+  }
+}
+```
+
+## Example: Courier Payroll Daily Export Dry Run
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 6,
+  "method": "tools/call",
+  "params": {
+    "name": "office_manager_query",
+    "arguments": {
+      "capability": "courier_payroll_daily_export",
+      "parameters": {
+        "report_date": "2026-06-16",
+        "pizzerias": ["Тамбов-1"],
+        "extract_source": false
+      }
     }
   }
 }

@@ -27,6 +27,8 @@ from dodo_bridge.analytics_kiosk_sales import (
     normalize_kiosk_sales_share_result,
 )
 from dodo_bridge.audit import AuditStore
+from dodo_bridge.automation.jobs import AutomationJobRegistry
+from dodo_bridge.automation.models import AutomationDryRunRequest
 from dodo_bridge.config import Settings, get_settings
 from dodo_bridge.connectors.superset import SupersetConnector
 from dodo_bridge.dodo_data import DodoDataService, normalize_units, validate_period
@@ -172,6 +174,10 @@ async def _handle_tools_call(
         payload, is_error = await _run_superset_query(arguments, service=service, audit=audit, actor=actor)
         return _json_rpc_result(request_id, _tool_result(payload, is_error=is_error))
 
+    if name == "office_manager_query":
+        payload, is_error = await _run_office_manager_query(arguments, service=service, audit=audit, actor=actor)
+        return _json_rpc_result(request_id, _tool_result(payload, is_error=is_error))
+
     return _json_rpc_result(request_id, _tool_result(_capability_not_enabled(name, arguments), is_error=True))
 
 
@@ -215,12 +221,28 @@ def _list_capabilities(service: DodoDataService) -> dict[str, Any]:
                 "allowed_by_policy": True,
             },
         ],
+        "office_manager_capabilities": _office_manager_capabilities(service.settings),
     }
     payload["message"] = (
         "Bridge MCP adapter is read-only. Use router tools with approved capability names; "
         "unknown capabilities are rejected or reported as missing."
     )
     return payload
+
+
+def _office_manager_capabilities(settings: Settings) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": job.name,
+            "description": job.description,
+            "status": job.status,
+            "source": job.source,
+            "enabled": True,
+            "read_only": True,
+            "writes_enabled": job.writes_enabled,
+        }
+        for job in AutomationJobRegistry().list(settings)
+    ]
 
 
 def _merge_capabilities(
@@ -477,6 +499,59 @@ async def _run_superset_query(
         connector="superset",
         decision=decision.outcome,
         reason=decision.reason,
+        outcome="success",
+        params=arguments,
+        response_chars=len(json.dumps(result, ensure_ascii=False, default=str)),
+    )
+    return result, False
+
+
+async def _run_office_manager_query(
+    arguments: dict[str, Any],
+    *,
+    service: DodoDataService,
+    audit: AuditStore,
+    actor: str,
+) -> tuple[dict[str, Any], bool]:
+    capability = arguments.get("capability")
+    raw_parameters = arguments.get("parameters") or {}
+    if not isinstance(raw_parameters, dict):
+        return {
+            "status": "invalid_arguments",
+            "read_only": True,
+            "capability": capability,
+            "message": "parameters must be an object",
+        }, True
+
+    if capability != "courier_payroll_daily_export":
+        return _capability_not_enabled("office_manager_query", arguments), True
+
+    try:
+        body = AutomationDryRunRequest.model_validate(raw_parameters)
+        result = await AutomationJobRegistry().get(str(capability)).dry_run(service.settings, body)
+    except ValidationError as exc:
+        return {
+            "status": "invalid_arguments",
+            "read_only": True,
+            "capability": capability,
+            "errors": exc.errors(),
+        }, True
+    except HTTPException as exc:
+        return {
+            "status": "invalid_arguments",
+            "read_only": True,
+            "capability": capability,
+            "message": str(exc.detail),
+        }, True
+
+    result = {**result, "read_only": True}
+    audit.record_event(
+        actor=actor,
+        intent=f"mcp:office_manager_query:{capability}",
+        tool_name=f"office_manager.{capability}",
+        connector="office_manager",
+        decision="allow",
+        reason="mcp_capability_router_dry_run",
         outcome="success",
         params=arguments,
         response_chars=len(json.dumps(result, ensure_ascii=False, default=str)),
