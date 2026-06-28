@@ -58,7 +58,9 @@ separate explicit enablement path.
     `accounting_inventory_stocks_summary`,
     `accounting_stock_consumptions_by_period_summary`,
     `ratings_customer_experience_summary`, `ratings_standards_summary`, and
-    `delivery_courier_productivity_summary`.
+    `delivery_courier_productivity_summary`, `staff_vacancies_count`,
+    `units_month_goals`, `orders_clients_statistics`,
+    `production_productivity`, and `production_orders_handover_time`.
   - First executable Superset router capabilities: `employee_discount` and
     `kiosk_sales_share`.
   - First executable Office Manager router capability:
@@ -252,7 +254,8 @@ is not allowed to read them.
 - Public Cloudflare route for `GET /dodo/accounting/sales/discounts-summary`
   returns `200`.
 - MCP `dodo_api_query` maps the compact inventory, stock consumption, ratings,
-  and courier productivity summaries to the existing read-only service layer.
+  courier productivity summaries, vacancies, month goals, client statistics,
+  and production source probes to the existing read-only service layer.
 - MCP `office_manager_query` maps `courier_payroll_daily_export` to the internal
   dry-run planner. It can plan Office Manager extraction and planned sheet rows,
   but write flags remain disabled.

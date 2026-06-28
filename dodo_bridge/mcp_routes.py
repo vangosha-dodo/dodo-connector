@@ -57,6 +57,11 @@ DODO_API_QUERY_CAPABILITIES = {
     "ratings_customer_experience_summary",
     "ratings_standards_summary",
     "delivery_courier_productivity_summary",
+    "staff_vacancies_count",
+    "units_month_goals",
+    "orders_clients_statistics",
+    "production_productivity",
+    "production_orders_handover_time",
 }
 
 
@@ -404,6 +409,39 @@ async def _run_dodo_api_query(
                 **_delivery_productivity_summary_query(arguments, service.settings)
             )
             tool_name = "dodo_delivery_statistics"
+        elif capability == "staff_vacancies_count":
+            result = await service.fetch(
+                function_name="staff_vacancies_count",
+                **_staff_vacancies_count_query(arguments, service.settings),
+            )
+            tool_name = "dodo_staff_vacancies_count"
+        elif capability == "units_month_goals":
+            result = await service.fetch(
+                function_name="units_month_goals",
+                **_units_month_goals_query(arguments),
+            )
+            tool_name = "dodo_units_month_goals"
+        elif capability == "orders_clients_statistics":
+            result = await _fetch_scope_aware_dodo_function(
+                service,
+                function_name="orders_clients_statistics",
+                **_orders_clients_statistics_query(arguments, service.settings),
+            )
+            tool_name = "dodo_orders_clients_statistics"
+        elif capability == "production_productivity":
+            result = await _fetch_scope_aware_dodo_function(
+                service,
+                function_name="production_productivity",
+                **_generic_period_fetch_query(arguments, service.settings),
+            )
+            tool_name = "dodo_production_productivity"
+        elif capability == "production_orders_handover_time":
+            result = await _fetch_scope_aware_dodo_function(
+                service,
+                function_name="production_orders_handover_time",
+                **_generic_period_fetch_query(arguments, service.settings),
+            )
+            tool_name = "dodo_production_orders_handover_time"
         else:
             return _capability_not_enabled("dodo_api_query", arguments), True
     except (ValueError, HTTPException) as exc:
@@ -426,6 +464,47 @@ async def _run_dodo_api_query(
         response_chars=len(json.dumps(result, ensure_ascii=False, default=str)),
     )
     return result, False
+
+
+async def _fetch_scope_aware_dodo_function(
+    service: DodoDataService,
+    *,
+    function_name: str,
+    parameters: dict[str, Any],
+    dry_run: bool,
+    fields: list[str] | None,
+    take: int | None,
+    max_pages: int | None,
+) -> dict[str, Any]:
+    try:
+        return await service.fetch(
+            function_name=function_name,
+            parameters=parameters,
+            dry_run=dry_run,
+            fields=fields,
+            take=take,
+            max_pages=max_pages,
+        )
+    except HTTPException as exc:
+        detail = exc.detail
+        if not (
+            exc.status_code == 502
+            and isinstance(detail, dict)
+            and detail.get("error") == "external_insufficient_scopes"
+        ):
+            raise
+        return {
+            "function": function_name,
+            "tool_name": detail.get("tool_name"),
+            "status": "blocked_by_scope",
+            "read_only": True,
+            "blocked": True,
+            "required_scope_hint": detail.get("required_scope_hint"),
+            "external_status": detail.get("external_status"),
+            "external_code": detail.get("external_code"),
+            "message": "Dodo API token does not have the required read scope for this source.",
+            "detail": detail,
+        }
 
 
 async def _run_superset_query(
@@ -745,6 +824,77 @@ def _delivery_productivity_summary_query(arguments: dict[str, Any], settings: Se
     }
 
 
+def _staff_vacancies_count_query(arguments: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    raw_parameters = _raw_parameters(arguments)
+    parameters: dict[str, Any] = {}
+    units = raw_parameters.get("units")
+    if units:
+        parameters["units"] = _units_or_all_pizzerias(settings, units)
+    country_code = raw_parameters.get("countryCode", raw_parameters.get("country_code"))
+    if country_code is not None:
+        parameters["countryCode"] = int(country_code)
+    if not parameters:
+        parameters["units"] = _units_or_all_pizzerias(settings, None)
+    return _generic_fetch_query(arguments, raw_parameters, parameters)
+
+
+def _units_month_goals_query(arguments: dict[str, Any]) -> dict[str, Any]:
+    raw_parameters = _raw_parameters(arguments)
+    unit = raw_parameters.get("unit", raw_parameters.get("units"))
+    if not isinstance(unit, str) or not unit.strip():
+        raise ValueError("parameters.unit is required")
+    month = _required_int(raw_parameters, "month")
+    year = _required_int(raw_parameters, "year")
+    if month < 1 or month > 12:
+        raise ValueError("parameters.month must be between 1 and 12")
+    if year < 2000 or year > 2100:
+        raise ValueError("parameters.year must be between 2000 and 2100")
+    parameters = {
+        "unit": normalize_units(unit),
+        "month": month,
+        "year": year,
+    }
+    return {
+        "parameters": parameters,
+        "dry_run": _dry_run(arguments, raw_parameters),
+        "fields": None,
+        "take": None,
+        "max_pages": None,
+    }
+
+
+def _orders_clients_statistics_query(arguments: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    raw_parameters = _raw_parameters(arguments)
+    from_date = _required_date(raw_parameters, "from")
+    to_date = _required_date(raw_parameters, "to")
+    validate_period(from_date, to_date, settings)
+    parameters = {
+        "units": _units_or_all_pizzerias(settings, raw_parameters.get("units")),
+        "fromDate": from_date.isoformat(),
+        "toDate": to_date.isoformat(),
+    }
+    return _generic_fetch_query(arguments, raw_parameters, parameters)
+
+
+def _generic_period_fetch_query(arguments: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    raw_parameters, parameters = _period_query(arguments, settings, exclusive_to=False)
+    return _generic_fetch_query(arguments, raw_parameters, parameters)
+
+
+def _generic_fetch_query(
+    arguments: dict[str, Any],
+    raw_parameters: dict[str, Any],
+    parameters: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "parameters": parameters,
+        "dry_run": _dry_run(arguments, raw_parameters),
+        "fields": _fields(raw_parameters),
+        "take": raw_parameters.get("take"),
+        "max_pages": _max_pages(raw_parameters),
+    }
+
+
 def _period_query(
     arguments: dict[str, Any],
     settings: Settings,
@@ -767,12 +917,32 @@ def _period_query(
     return raw_parameters, parameters
 
 
+def _raw_parameters(arguments: dict[str, Any]) -> dict[str, Any]:
+    raw_parameters = arguments.get("parameters") or {}
+    if not isinstance(raw_parameters, dict):
+        raise ValueError("parameters must be an object")
+    return raw_parameters
+
+
 def _dry_run(arguments: dict[str, Any], raw_parameters: dict[str, Any]) -> bool:
     return bool(arguments.get("dry_run", raw_parameters.get("dry_run", False)))
 
 
 def _max_pages(raw_parameters: dict[str, Any]) -> Any:
     return raw_parameters.get("max_pages", raw_parameters.get("maxPages"))
+
+
+def _fields(raw_parameters: dict[str, Any]) -> list[str] | None:
+    value = raw_parameters.get("fields")
+    if value is None:
+        return None
+    if isinstance(value, str):
+        fields = [item.strip() for item in value.split(",") if item.strip()]
+        return fields or None
+    if isinstance(value, list):
+        fields = [str(item).strip() for item in value if str(item).strip()]
+        return fields or None
+    raise ValueError("parameters.fields must be a comma-separated string or array")
 
 
 def _required_date(parameters: dict[str, Any], key: str) -> date:
@@ -783,6 +953,14 @@ def _required_date(parameters: dict[str, Any], key: str) -> date:
         return date.fromisoformat(value)
     except ValueError as exc:
         raise ValueError(f"parameters.{key} must be in YYYY-MM-DD format") from exc
+
+
+def _required_int(parameters: dict[str, Any], key: str) -> int:
+    value = parameters.get(key)
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"parameters.{key} is required as an integer") from exc
 
 
 def _units_or_all_pizzerias(settings: Settings, units: Any) -> str:

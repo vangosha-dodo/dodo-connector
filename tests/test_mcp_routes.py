@@ -77,6 +77,11 @@ def test_mcp_tools_call_list_capabilities_returns_read_only_capabilities(tmp_pat
     assert "accounting_sales_comparison" in capability_names
     assert "accounting_inventory_stocks_summary" in capability_names
     assert "delivery_courier_productivity_summary" in capability_names
+    assert "staff_vacancies_count" in capability_names
+    assert "units_month_goals" in capability_names
+    assert "orders_clients_statistics" in capability_names
+    assert "production_productivity" in capability_names
+    assert "production_orders_handover_time" in capability_names
     assert "courier_orders" not in capability_names
     office_manager_names = {
         item["name"] for item in result["structuredContent"]["office_manager_capabilities"]
@@ -798,6 +803,260 @@ def test_mcp_dodo_api_query_runs_delivery_courier_productivity_summary(tmp_path,
         "parameters": {"units": "unit-1", "from": "2026-06-01", "to": "2026-07-01"},
         "dry_run": True,
         "top_limit": 8,
+    }
+
+
+def test_mcp_dodo_api_query_runs_staff_vacancies_count(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch(
+        self,  # noqa: ANN001
+        *,
+        function_name,
+        parameters,
+        dry_run,
+        fields,
+        take,
+        max_pages,
+    ):
+        captured["function_name"] = function_name
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        captured["fields"] = fields
+        captured["take"] = take
+        captured["max_pages"] = max_pages
+        return {"function": function_name, "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch", fake_fetch)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "staff_vacancies_count",
+            "parameters": {
+                "units": ["unit-1", "unit-2"],
+                "fields": ["id", "name", "vacanciesCount"],
+                "take": 100,
+                "maxPages": 2,
+            },
+            "dry_run": True,
+        },
+        request_id=21,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "staff_vacancies_count"
+    assert captured == {
+        "function_name": "staff_vacancies_count",
+        "parameters": {"units": "unit-1,unit-2"},
+        "dry_run": True,
+        "fields": ["id", "name", "vacanciesCount"],
+        "take": 100,
+        "max_pages": 2,
+    }
+
+
+def test_mcp_dodo_api_query_runs_units_month_goals(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch(
+        self,  # noqa: ANN001
+        *,
+        function_name,
+        parameters,
+        dry_run,
+        fields,
+        take,
+        max_pages,
+    ):
+        captured["function_name"] = function_name
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        captured["fields"] = fields
+        captured["take"] = take
+        captured["max_pages"] = max_pages
+        return {"function": function_name, "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch", fake_fetch)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "units_month_goals",
+            "parameters": {"unit": "unit-1", "month": 6, "year": 2026},
+            "dry_run": True,
+        },
+        request_id=22,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "units_month_goals"
+    assert captured == {
+        "function_name": "units_month_goals",
+        "parameters": {"unit": "unit-1", "month": 6, "year": 2026},
+        "dry_run": True,
+        "fields": None,
+        "take": None,
+        "max_pages": None,
+    }
+
+
+def test_mcp_dodo_api_query_runs_orders_clients_statistics(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch(
+        self,  # noqa: ANN001
+        *,
+        function_name,
+        parameters,
+        dry_run,
+        fields,
+        take,
+        max_pages,
+    ):
+        captured["function_name"] = function_name
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        captured["fields"] = fields
+        captured["take"] = take
+        captured["max_pages"] = max_pages
+        return {"function": function_name, "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch", fake_fetch)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "orders_clients_statistics",
+            "parameters": {
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-30",
+                "fields": "unitId,newClientsCount",
+                "take": 200,
+                "max_pages": 3,
+            },
+            "dry_run": True,
+        },
+        request_id=23,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "orders_clients_statistics"
+    assert captured == {
+        "function_name": "orders_clients_statistics",
+        "parameters": {"units": "unit-1", "fromDate": "2026-06-01", "toDate": "2026-06-30"},
+        "dry_run": True,
+        "fields": ["unitId", "newClientsCount"],
+        "take": 200,
+        "max_pages": 3,
+    }
+
+
+def test_mcp_dodo_api_query_runs_production_productivity(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch(
+        self,  # noqa: ANN001
+        *,
+        function_name,
+        parameters,
+        dry_run,
+        fields,
+        take,
+        max_pages,
+    ):
+        captured["function_name"] = function_name
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        captured["fields"] = fields
+        captured["take"] = take
+        captured["max_pages"] = max_pages
+        return {"function": function_name, "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch", fake_fetch)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "production_productivity",
+            "parameters": {
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-07",
+                "fields": ["unitId", "productivity"],
+                "take": 50,
+            },
+            "dry_run": True,
+        },
+        request_id=24,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "production_productivity"
+    assert captured == {
+        "function_name": "production_productivity",
+        "parameters": {"units": "unit-1", "from": "2026-06-01", "to": "2026-06-07"},
+        "dry_run": True,
+        "fields": ["unitId", "productivity"],
+        "take": 50,
+        "max_pages": None,
+    }
+
+
+def test_mcp_dodo_api_query_runs_production_orders_handover_time(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_fetch(
+        self,  # noqa: ANN001
+        *,
+        function_name,
+        parameters,
+        dry_run,
+        fields,
+        take,
+        max_pages,
+    ):
+        captured["function_name"] = function_name
+        captured["parameters"] = parameters
+        captured["dry_run"] = dry_run
+        captured["fields"] = fields
+        captured["take"] = take
+        captured["max_pages"] = max_pages
+        return {"function": function_name, "read_only": True}
+
+    monkeypatch.setattr(DodoDataService, "fetch", fake_fetch)
+
+    result = call_mcp_tool(
+        tmp_path,
+        "dodo_api_query",
+        {
+            "capability": "production_orders_handover_time",
+            "parameters": {
+                "units": "unit-1",
+                "from": "2026-06-01",
+                "to": "2026-06-07",
+                "take": 50,
+                "maxPages": 2,
+            },
+            "dry_run": True,
+        },
+        request_id=25,
+    )
+
+    assert result["isError"] is False
+    assert result["structuredContent"]["function"] == "production_orders_handover_time"
+    assert captured == {
+        "function_name": "production_orders_handover_time",
+        "parameters": {"units": "unit-1", "from": "2026-06-01", "to": "2026-06-07"},
+        "dry_run": True,
+        "fields": None,
+        "take": 50,
+        "max_pages": 2,
     }
 
 

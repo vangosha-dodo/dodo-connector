@@ -47,6 +47,11 @@ The endpoint uses JSON-RPC 2.0 request and response envelopes.
     - `ratings_customer_experience_summary`
     - `ratings_standards_summary`
     - `delivery_courier_productivity_summary`
+    - `staff_vacancies_count`
+    - `units_month_goals`
+    - `orders_clients_statistics`
+    - `production_productivity`
+    - `production_orders_handover_time`
 - `superset_query`
   - Runs approved Superset recipes by capability name.
   - Enabled capabilities:

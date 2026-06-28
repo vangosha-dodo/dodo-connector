@@ -65,13 +65,12 @@ Dodo API capabilities для `dodo_api_query`:
 - `ratings_customer_experience_summary`, `ratings_standards_summary`: рейтинги.
 - `accounting_inventory_stocks_summary`: остатки и риски по складу.
 - `accounting_stock_consumptions_by_period_summary`: расход ингредиентов/товаров.
-
-OpenAPI-only Actions, если они доступны в Custom GPT:
-- `getDodoOrdersClientsStatistics`: новые клиенты/отток; при `blocked_by_scope`
+- `staff_vacancies_count`: открытые вакансии.
+- `units_month_goals`: цели месяца по одной пиццерии.
+- `orders_clients_statistics`: новые клиенты/отток; при `blocked_by_scope`
   нужен scope `orders`.
-- `getDodoProductionProductivity`, `getDodoProductionOrdersHandoverTime`:
-  производство и тепловая полка; при `blocked_by_scope` нужен scope
-  `productionefficiency`.
+- `production_productivity`, `production_orders_handover_time`: производство и
+  тепловая полка; при `blocked_by_scope` нужен scope `productionefficiency`.
 
 Superset capabilities для `superset_query`:
 - `employee_discount`: дисконт сотрудникам.
