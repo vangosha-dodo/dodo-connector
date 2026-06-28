@@ -1,6 +1,6 @@
 # Dodo ChatGPT Bridge - project status
 
-Updated: 2026-06-22
+Updated: 2026-06-28
 
 ## Goal
 
@@ -43,6 +43,15 @@ separate explicit enablement path.
   - This generates the current read-only Action schema from Bridge code.
   - The public route supports `HEAD`, gzip compression, and keeps the external
     server URL as `https://dock-translations-investigated-basketball.trycloudflare.com`.
+- Experimental MCP adapter:
+  - `POST /mcp`
+  - Supports JSON-RPC `initialize`, `tools/list`, and `tools/call`.
+  - Exposes router tools only: `list_capabilities`, `dodo_api_query`,
+    `superset_query`, `office_manager_query`, and `report_missing_capability`.
+  - First executable Dodo router capability: `accounting_sales_summary`.
+  - Unknown or unmapped capabilities return `capability_not_enabled`; no
+    arbitrary URL, SQL, JavaScript, browser command, write, or admin execution is
+    allowed.
 - Caddy allowlist for the public tunnel is tracked in `deploy/caddy/Caddyfile`.
 - GitHub synchronization for the local project.
 

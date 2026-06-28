@@ -19,6 +19,7 @@ from dodo_bridge.connectors.superset import SupersetConnector
 from dodo_bridge.dodo_data_routes import router as dodo_data_router
 from dodo_bridge.kb_auth_routes import router as kb_auth_router
 from dodo_bridge.learning import LearningEngine
+from dodo_bridge.mcp_routes import router as mcp_router
 from dodo_bridge.models import (
     ConnectorName,
     FeedbackRequest,
@@ -37,6 +38,7 @@ app.include_router(automation_router)
 app.include_router(dodo_auth_router)
 app.include_router(dodo_data_router)
 app.include_router(kb_auth_router)
+app.include_router(mcp_router)
 app.include_router(system_router)
 
 
