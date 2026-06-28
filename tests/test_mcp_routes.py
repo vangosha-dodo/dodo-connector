@@ -74,6 +74,10 @@ def test_mcp_tools_call_list_capabilities_returns_read_only_capabilities(tmp_pat
         item["name"] for item in result["structuredContent"]["dodo_capabilities"]
     }
     assert "accounting_sales_summary" in capability_names
+    assert "accounting_inventory_stocks_summary" in capability_names
+    assert "delivery_courier_productivity_summary" in capability_names
+    assert "courier_orders" not in capability_names
+    assert "accounting_sales_comparison" not in capability_names
     office_manager_names = {
         item["name"] for item in result["structuredContent"]["office_manager_capabilities"]
     }

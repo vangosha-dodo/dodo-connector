@@ -31,7 +31,7 @@ The endpoint uses JSON-RPC 2.0 request and response envelopes.
 ## MCP Tools
 
 - `list_capabilities`
-  - Lists read-only Bridge MCP router tools and Dodo capabilities.
+  - Lists read-only Bridge MCP router tools and executable router capabilities.
 - `dodo_api_query`
   - Runs an approved read-only Dodo API capability by name.
   - Enabled capabilities:

@@ -44,6 +44,19 @@ router = APIRouter(tags=["mcp"])
 JSON_RPC_VERSION = "2.0"
 MCP_PROTOCOL_VERSION = "2025-11-25"
 SERVER_INFO = {"name": "dodo-chatgpt-bridge", "version": "0.1.0"}
+DODO_API_QUERY_CAPABILITIES = {
+    "accounting_sales_summary",
+    "accounting_writeoffs_products_summary",
+    "accounting_slice_writeoff_rate",
+    "accounting_slice_daily_dynamics",
+    "accounting_sales_channels_summary",
+    "accounting_sales_discounts_summary",
+    "accounting_inventory_stocks_summary",
+    "accounting_stock_consumptions_by_period_summary",
+    "ratings_customer_experience_summary",
+    "ratings_standards_summary",
+    "delivery_courier_productivity_summary",
+}
 
 
 def settings_dep() -> Settings:
@@ -182,18 +195,20 @@ async def _handle_tools_call(
 
 
 def _list_capabilities(service: DodoDataService) -> dict[str, Any]:
-    dodo_capabilities = _merge_capabilities(
-        service.list_functions(),
-        [
-            {
-                "name": "accounting_sales_summary",
-                "description": "Compact accounting sales revenue summary by pizzeria.",
-                "tool_name": "dodo_accounting_sales",
-                "enabled": True,
-                "allowed_by_policy": True,
-                "paginated": True,
-            }
-        ],
+    dodo_capabilities = _filter_dodo_api_query_capabilities(
+        _merge_capabilities(
+            service.list_functions(),
+            [
+                {
+                    "name": "accounting_sales_summary",
+                    "description": "Compact accounting sales revenue summary by pizzeria.",
+                    "tool_name": "dodo_accounting_sales",
+                    "enabled": True,
+                    "allowed_by_policy": True,
+                    "paginated": True,
+                }
+            ],
+        )
     )
     payload = {
         "read_only": True,
@@ -253,6 +268,14 @@ def _merge_capabilities(
     for item in additions:
         by_name.setdefault(str(item.get("name")), item)
     return [by_name[name] for name in sorted(by_name)]
+
+
+def _filter_dodo_api_query_capabilities(capabilities: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        item
+        for item in capabilities
+        if item.get("name") in DODO_API_QUERY_CAPABILITIES
+    ]
 
 
 def _report_missing_capability(
