@@ -10,6 +10,7 @@ primary `Instructions` field short and use this file for extra routing details.
 - Do not request passwords, tokens, cookies, API keys, or email codes.
 - Do not use OpenClaw.
 - If a user asks to change data, say Bridge can only read data.
+- When tool access or routing is uncertain, call `getBridgeAgentStatus` first.
 
 ## Date Rules
 
@@ -34,6 +35,14 @@ only for explicit row-level requests. The Custom GPT OpenAPI schema intentionall
 omits heavy raw endpoints when a compact summary endpoint exists.
 
 ## Action Routing
+
+### Self Diagnostics
+
+- `getBridgeAgentStatus`
+  - Read-only Bridge status for the GPT agent.
+  - Shows OpenAPI operation count, source capability names, and next-step hints.
+  - Use before analysis when the chat appears to have stale/missing Actions or
+    when source selection is unclear.
 
 ### Sales
 

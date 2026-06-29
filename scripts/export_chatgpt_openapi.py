@@ -521,6 +521,20 @@ def build_schema(server_url: str) -> dict[str, Any]:
                     ),
                 }
             },
+            "/system/agent-status": {
+                "get": {
+                    "operationId": "getBridgeAgentStatus",
+                    "summary": "Check Bridge read-only agent status",
+                    "description": (
+                        "Return Bridge read-only status, source capability names, and "
+                        "routing hints for the GPT agent before choosing a data action."
+                    ),
+                    "responses": successful_response(
+                        "Bridge agent status.",
+                        "#/components/schemas/AgentStatusResponse",
+                    ),
+                }
+            },
             "/dodo/pizzerias": {
                 "get": {
                     "operationId": "listDodoPizzerias",
@@ -880,6 +894,11 @@ def build_schema(server_url: str) -> dict[str, Any]:
                 "KioskSalesShareSummary": kiosk_sales_share_summary_schema(),
                 "KioskSalesShareRow": kiosk_sales_share_row_schema(),
                 "KioskSalesShareSupersetMeta": kiosk_sales_share_superset_meta_schema(),
+                "AgentStatusResponse": agent_status_response_schema(),
+                "AgentStatusOpenApi": agent_status_openapi_schema(),
+                "AgentStatusSources": agent_status_sources_schema(),
+                "AgentStatusSource": agent_status_source_schema(),
+                "AgentStatusNextStep": agent_status_next_step_schema(),
                 "MissingCapabilityRequest": missing_capability_request_schema(),
                 "MissingCapabilityPeriod": missing_capability_period_schema(),
                 "MissingCapabilityResponse": missing_capability_response_schema(),
@@ -1041,6 +1060,90 @@ def dodo_pizzeria_schema() -> dict[str, Any]:
             "unit_type",
             "is_pizzeria",
         ],
+        "additionalProperties": False,
+    }
+
+
+def agent_status_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "description": "Read-only Bridge status and routing hints for the GPT agent.",
+        "properties": {
+            "status": {"type": "string"},
+            "read_only": {"type": "boolean", "const": True},
+            "dodo_is_changed": {"type": "boolean", "const": False},
+            "writes": {"type": "array", "items": {"type": "string"}},
+            "openapi": {"$ref": "#/components/schemas/AgentStatusOpenApi"},
+            "sources": {"$ref": "#/components/schemas/AgentStatusSources"},
+            "agent_next_steps": {
+                "type": "array",
+                "items": {"$ref": "#/components/schemas/AgentStatusNextStep"},
+            },
+            "message": {"type": "string"},
+        },
+        "required": [
+            "status",
+            "read_only",
+            "dodo_is_changed",
+            "writes",
+            "openapi",
+            "sources",
+            "agent_next_steps",
+            "message",
+        ],
+        "additionalProperties": False,
+    }
+
+
+def agent_status_openapi_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "operation_count": {"type": "integer"},
+            "operation_limit": {"type": "integer"},
+            "within_limit": {"type": "boolean"},
+        },
+        "required": ["operation_count", "operation_limit", "within_limit"],
+        "additionalProperties": False,
+    }
+
+
+def agent_status_sources_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "dodo_api": {"$ref": "#/components/schemas/AgentStatusSource"},
+            "superset": {"$ref": "#/components/schemas/AgentStatusSource"},
+            "office_manager": {"$ref": "#/components/schemas/AgentStatusSource"},
+        },
+        "required": ["dodo_api", "superset", "office_manager"],
+        "additionalProperties": False,
+    }
+
+
+def agent_status_source_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "enabled": {"type": "boolean"},
+            "capability_count": {"type": "integer"},
+            "capabilities": {"type": "array", "items": {"type": "string"}},
+            "mode": {"type": "string"},
+        },
+        "required": ["enabled", "capability_count", "capabilities"],
+        "additionalProperties": False,
+    }
+
+
+def agent_status_next_step_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string"},
+            "tool": {"type": "string"},
+            "when": {"type": "string"},
+        },
+        "required": ["action", "tool", "when"],
         "additionalProperties": False,
     }
 

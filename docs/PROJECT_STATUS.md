@@ -43,6 +43,10 @@ separate explicit enablement path.
   - This generates the current read-only Action schema from Bridge code.
   - The public route supports `HEAD`, gzip compression, and keeps the external
     server URL as `https://dock-translations-investigated-basketball.trycloudflare.com`.
+- Agent self-diagnostics:
+  - `GET /system/agent-status`
+  - Read-only Action for GPT to check Bridge health, operation-limit status,
+    source capability names, and routing hints before choosing a data action.
 - Experimental MCP adapter:
   - `POST /mcp`
   - Supports JSON-RPC `initialize`, `tools/list`, and `tools/call`.

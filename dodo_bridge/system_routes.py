@@ -8,10 +8,16 @@ from fastapi import APIRouter, Depends, Header, Request
 from pydantic import BaseModel, Field, field_validator
 
 from dodo_bridge.audit import AuditStore
+from dodo_bridge.capabilities import build_agent_status_payload, build_capabilities_payload
 from dodo_bridge.config import Settings, get_settings
+from dodo_bridge.dodo_data import DodoDataService
+from dodo_bridge.policy import PolicyEngine
+from dodo_bridge.registry import ToolRegistry
 from dodo_bridge.security import authenticate_actor
+from scripts.export_chatgpt_openapi import build_schema
 
 router = APIRouter(prefix="/system", tags=["system"])
+HTTP_METHODS = {"get", "put", "post", "delete", "patch", "head", "options", "trace"}
 
 
 class MissingCapabilityPeriod(BaseModel):
@@ -48,10 +54,26 @@ def settings_dep() -> Settings:
     return get_settings()
 
 
+def registry_dep(settings: Settings = Depends(settings_dep)) -> ToolRegistry:
+    return ToolRegistry(settings.tool_registry_path)
+
+
+def policy_dep(settings: Settings = Depends(settings_dep)) -> PolicyEngine:
+    return PolicyEngine.from_yaml(settings.policy_path)
+
+
 def audit_dep(settings: Settings = Depends(settings_dep)) -> AuditStore:
     audit = AuditStore(settings.audit_db_path)
     audit.initialize()
     return audit
+
+
+def service_dep(
+    settings: Settings = Depends(settings_dep),
+    registry: ToolRegistry = Depends(registry_dep),
+    policy: PolicyEngine = Depends(policy_dep),
+) -> DodoDataService:
+    return DodoDataService(settings=settings, registry=registry, policy=policy)
 
 
 def actor_dep(
@@ -67,6 +89,19 @@ def actor_dep(
         x_bridge_key=x_bridge_key,
         authorization=authorization,
         x_actor=x_actor,
+    )
+
+
+@router.get("/agent-status")
+def agent_status(
+    service: DodoDataService = Depends(service_dep),
+    actor: str = Depends(actor_dep),
+) -> dict[str, Any]:
+    del actor
+    capabilities = build_capabilities_payload(service)
+    return build_agent_status_payload(
+        capabilities=capabilities,
+        openapi_operation_count=_openapi_operation_count(),
     )
 
 
@@ -119,3 +154,17 @@ def report_missing_capability(
         ),
     }
     return result
+
+
+def _openapi_operation_count() -> int:
+    schema = build_schema("https://bridge.local")
+    paths = schema.get("paths", {})
+    if not isinstance(paths, dict):
+        return 0
+    return sum(
+        1
+        for path_item in paths.values()
+        if isinstance(path_item, dict)
+        for method in path_item
+        if method.lower() in HTTP_METHODS
+    )

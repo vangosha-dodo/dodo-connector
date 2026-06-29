@@ -8,6 +8,47 @@ from dodo_bridge.main import app
 from dodo_bridge.system_routes import settings_dep as system_settings_dep
 
 
+def test_agent_status_returns_read_only_routing_snapshot(tmp_path) -> None:
+    settings = make_settings(tmp_path)
+    app.dependency_overrides[system_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get("/system/agent-status")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["read_only"] is True
+    assert payload["dodo_is_changed"] is False
+    assert payload["openapi"]["operation_limit"] == 30
+    assert payload["openapi"]["operation_count"] <= 30
+    assert payload["sources"]["dodo_api"]["enabled"] is True
+    assert "accounting_sales_summary" in payload["sources"]["dodo_api"]["capabilities"]
+    assert "courier_orders" not in payload["sources"]["dodo_api"]["capabilities"]
+    assert payload["sources"]["superset"]["capabilities"] == [
+        "employee_discount",
+        "kiosk_sales_share",
+    ]
+    assert payload["sources"]["office_manager"]["capabilities"] == [
+        "courier_payroll_daily_export"
+    ]
+    assert payload["agent_next_steps"][0]["action"] == "check_status"
+
+
+def test_agent_status_requires_api_key_when_configured(tmp_path) -> None:
+    settings = make_settings(tmp_path, api_keys=["secret-key"])
+    app.dependency_overrides[system_settings_dep] = lambda: settings
+    try:
+        client = TestClient(app)
+        response = client.get("/system/agent-status")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+
+
 def test_report_missing_capability_records_backlog_entry(tmp_path) -> None:
     settings = make_settings(tmp_path)
     app.dependency_overrides[system_settings_dep] = lambda: settings

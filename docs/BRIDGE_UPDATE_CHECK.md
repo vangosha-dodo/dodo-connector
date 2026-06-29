@@ -23,7 +23,7 @@ Expected result:
 ```text
 OK Bridge health-check: https://dock-translations-investigated-basketball.trycloudflare.com
 - OK health: status=ok
-- OK openapi_operation_limit: 25 <= 30
+- OK openapi_operation_limit: 26 <= 30
 - OK mcp_diagnostic_not_in_openapi: absent
 - OK mcp_read_only: read_only=True
 - OK forbidden_capabilities_absent: absent

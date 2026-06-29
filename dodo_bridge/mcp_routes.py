@@ -29,6 +29,7 @@ from dodo_bridge.analytics_kiosk_sales import (
 from dodo_bridge.audit import AuditStore
 from dodo_bridge.automation.jobs import AutomationJobRegistry
 from dodo_bridge.automation.models import AutomationDryRunRequest
+from dodo_bridge.capabilities import build_capabilities_payload
 from dodo_bridge.config import Settings, get_settings
 from dodo_bridge.connectors.superset import SupersetConnector
 from dodo_bridge.dodo_data import DodoDataService, normalize_units, validate_period
@@ -44,25 +45,6 @@ router = APIRouter(tags=["mcp"])
 JSON_RPC_VERSION = "2.0"
 MCP_PROTOCOL_VERSION = "2025-11-25"
 SERVER_INFO = {"name": "dodo-chatgpt-bridge", "version": "0.1.0"}
-DODO_API_QUERY_CAPABILITIES = {
-    "accounting_sales_summary",
-    "accounting_sales_comparison",
-    "accounting_writeoffs_products_summary",
-    "accounting_slice_writeoff_rate",
-    "accounting_slice_daily_dynamics",
-    "accounting_sales_channels_summary",
-    "accounting_sales_discounts_summary",
-    "accounting_inventory_stocks_summary",
-    "accounting_stock_consumptions_by_period_summary",
-    "ratings_customer_experience_summary",
-    "ratings_standards_summary",
-    "delivery_courier_productivity_summary",
-    "staff_vacancies_count",
-    "units_month_goals",
-    "orders_clients_statistics",
-    "production_productivity",
-    "production_orders_handover_time",
-}
 
 
 def settings_dep() -> Settings:
@@ -219,87 +201,12 @@ async def _handle_tools_call(
 
 
 def _list_capabilities(service: DodoDataService) -> dict[str, Any]:
-    dodo_capabilities = _filter_dodo_api_query_capabilities(
-        _merge_capabilities(
-            service.list_functions(),
-            [
-                {
-                    "name": "accounting_sales_summary",
-                    "description": "Compact accounting sales revenue summary by pizzeria.",
-                    "tool_name": "dodo_accounting_sales",
-                    "enabled": True,
-                    "allowed_by_policy": True,
-                    "paginated": True,
-                }
-            ],
-        )
-    )
-    payload = {
-        "read_only": True,
-        "mcp_tools": [
-            {
-                "name": tool["name"],
-                "description": tool["description"],
-            }
-            for tool in _mcp_tools()
-        ],
-        "dodo_capabilities": dodo_capabilities,
-        "superset_capabilities": [
-            {
-                "name": "employee_discount",
-                "description": "Employee discount from the approved Superset recipe.",
-                "tool_name": EMPLOYEE_DISCOUNT_TOOL,
-                "enabled": True,
-                "allowed_by_policy": True,
-            },
-            {
-                "name": "kiosk_sales_share",
-                "description": "Kiosk sales share from the approved Superset recipe.",
-                "tool_name": KIOSK_SALES_SHARE_TOOL,
-                "enabled": True,
-                "allowed_by_policy": True,
-            },
-        ],
-        "office_manager_capabilities": _office_manager_capabilities(service.settings),
-    }
+    payload = build_capabilities_payload(service, mcp_tools=_mcp_tools())
     payload["message"] = (
         "Bridge MCP adapter is read-only. Use router tools with approved capability names; "
         "unknown capabilities are rejected or reported as missing."
     )
     return payload
-
-
-def _office_manager_capabilities(settings: Settings) -> list[dict[str, Any]]:
-    return [
-        {
-            "name": job.name,
-            "description": job.description,
-            "status": job.status,
-            "source": job.source,
-            "enabled": True,
-            "read_only": True,
-            "writes_enabled": job.writes_enabled,
-        }
-        for job in AutomationJobRegistry().list(settings)
-    ]
-
-
-def _merge_capabilities(
-    existing: list[dict[str, Any]],
-    additions: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    by_name = {str(item.get("name")): item for item in existing}
-    for item in additions:
-        by_name.setdefault(str(item.get("name")), item)
-    return [by_name[name] for name in sorted(by_name)]
-
-
-def _filter_dodo_api_query_capabilities(capabilities: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        item
-        for item in capabilities
-        if item.get("name") in DODO_API_QUERY_CAPABILITIES
-    ]
 
 
 def _report_missing_capability(
