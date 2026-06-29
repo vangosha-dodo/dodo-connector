@@ -1,6 +1,6 @@
 # Dodo ChatGPT Bridge - project status
 
-Updated: 2026-06-28
+Updated: 2026-06-29
 
 ## Goal
 
@@ -71,6 +71,11 @@ separate explicit enablement path.
     arbitrary URL, SQL, JavaScript, browser command, write, or admin execution is
     allowed.
 - Caddy allowlist for the public tunnel is tracked in `deploy/caddy/Caddyfile`.
+- Deployment diagnostics:
+  - `python -m scripts.check_bridge_health` verifies `/health`, the ChatGPT
+    OpenAPI operation limit, MCP read-only mode, and that MCP diagnostics stay
+    outside the ChatGPT Action schema.
+  - Runbook: `docs/BRIDGE_UPDATE_CHECK.md`.
 - GitHub synchronization for the local project.
 
 ### Pizzeria catalog

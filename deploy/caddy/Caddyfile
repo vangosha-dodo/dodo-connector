@@ -11,7 +11,7 @@ http://:8001 {
 	}
 	encode zstd gzip
 
-	@read_only_bridge path /health /chatgpt/* /dodo/* /analytics/* /system/* /mcp
+	@read_only_bridge path /health /chatgpt/* /dodo/* /analytics/* /system/* /mcp /mcp/capabilities
 	handle @read_only_bridge {
 		reverse_proxy 127.0.0.1:8000 {
 			header_up X-Forwarded-Proto {http.request.header.X-Forwarded-Proto}
